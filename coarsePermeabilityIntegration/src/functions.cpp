@@ -34,7 +34,12 @@ void computeCapillaryPressure(float p_ci, float g, float delta_rho, float h, flo
 	}
 }
 
-void inverseCapillaryPressure(int n, float* p_cap_values, float* p_cap_ref_table, float* s_b_ref_table, float* s_b_values){
+void inverseCapillaryPressure(int n, float g, float h, float delta_rho, float c_cap, float* p_cap_values, float* s_b_values){
+	// pCap-saturation reference table
+	float resolution = 0.01;
+	float p_cap_ref_table[(int)(1/resolution+1)];
+	float s_b_ref_table[(int)(1/resolution+1)];
+	createReferenceTable(g, h, delta_rho, c_cap, resolution, p_cap_ref_table, s_b_ref_table);
 	for (int i = 0; i < n+1; i++){
 		float curr_p_cap = p_cap_values[i];
 		int j = 0;
