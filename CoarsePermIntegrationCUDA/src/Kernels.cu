@@ -8,7 +8,7 @@ void initAllocate(CoarsePermIntegrationKernelArgs* args){
 }
 
 // Function to create an array of the permeability on the subintervals
-__device__ void kDistribution(float dz, float h, float* k_heights, float* k_data, float* k_values){
+__device__ int kDistribution(float dz, float h, float* k_heights, float* k_data, float* k_values){
 	float z = 0;
 	int j = 0;
 	float curr_height = 0;
@@ -19,6 +19,33 @@ __device__ void kDistribution(float dz, float h, float* k_heights, float* k_data
 			k_values[j] = k_data[i];
 			j++;
 		}
+	}
+	return j;
+}
+
+// Function to compute the capillary pressure in the subintervals
+__device__ void computeCapillaryPressure(float p_ci, float g, float delta_rho, float h, float dz, int n, float* p_cap_values){
+	for (int i = 0; i < n+1 ; i++){
+		p_cap_values[i] = p_ci + g*(-delta_rho)*(dz*i-h);
+	}
+}
+
+__device__ void inverseCapillaryPressure(int n, float* p_cap_values, float* p_cap_ref_table, float* s_b_ref_table){
+	// pCap-saturation reference table
+	for (int i = 0; i < n+1; i++){
+		float curr_p_cap = p_cap_values[i];
+		int j = 0;
+		while (curr_p_cap > p_cap_ref_table[j]){
+			j++;
+		}
+		p_cap_values[i] = s_b_ref_table[j];
+	}
+}
+
+__device__ void computeMobility(int n, float* s_b_values){
+	float lambda_end_point = 1;
+	for (int i = 0; i < n+1; i++){
+		s_b_values[i] = pow(s_b_values[i], 3)*lambda_end_point;
 	}
 }
 
@@ -46,13 +73,22 @@ __global__ void CoarsePermIntegrationKernel(){
 		float h = global_index(cpi_ctx.height_distribution.ptr,
 							   cpi_ctx.height_distribution.pitch, xid, yid)[0];
 		float k_values[101];
+		float p_cap_values[101];
+
 		for (int i = 0; i<101; i++){
 			k_values[i] = 0;
+			p_cap_values[i] = 0;
 		}
 
-		kDistribution(cpi_ctx.dz, h, cpi_ctx.k_heights.ptr, cpi_ctx.k_data.ptr, k_values);
+		int n = kDistribution(cpi_ctx.dz, h, cpi_ctx.k_heights.ptr, cpi_ctx.k_data.ptr, k_values);
+		float K = trapezoidal(cpi_ctx.dz, n-1, k_values);
 
-		float K = trapezoidal(cpi_ctx.dz, 100, k_values);
+		computeCapillaryPressure(cpi_ctx.p_ci, cpi_ctx.g, cpi_ctx.delta_rho,
+								 h, cpi_ctx.dz, n, p_cap_values);
+
+		inverseCapillaryPressure(n, p_cap_values, cpi_ctx.p_cap_ref_table.ptr, cpi_ctx.s_b_ref_table.ptr);
+
+		computeMobility(n, p_cap_values);
 
 		global_index(cpi_ctx.K.ptr, cpi_ctx.K.pitch, xid, yid)[0] = K;
     }

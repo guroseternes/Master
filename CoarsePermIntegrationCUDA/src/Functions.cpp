@@ -25,33 +25,6 @@ void createReferenceTable(float g, float h, float delta_rho, float c_cap, float 
 }
 
 
-
-// Function to compute the capillary pressure in the subintervals
-void computeCapillaryPressure(float p_ci, float g, float delta_rho, float h, float dz, int n, float* p_cap_values){
-
-	for (int i = 0; i < n+1 ; i++){
-		p_cap_values[i] = p_ci + g*(-delta_rho)*(dz*i-h);
-	}
-}
-
-/*void inverseCapillaryPressure(int n, float* p_cap_values, float* s_b_values){
-	// pCap-saturation reference table
-	for (int i = 0; i < n+1; i++){
-		float curr_p_cap = p_cap_values[i];
-		int j = 0;
-		while (curr_p_cap > p_cap_ref_table[j]){
-			j++;
-		}
-		s_b_values[i] = s_b_ref_table[j];
-	}
-}*/
-
-void computeMobility(int n, float* s_b_values, float lambda_end_point, float* lambda_values){
-	for (int i = 0; i < n+1; i++){
-		lambda_values[i] = pow(s_b_values[i], 3)*lambda_end_point;
-	}
-}
-
 void multiply(int n, float* x_values, float* y_values, float* product){
 	for (int i = 0; i < n; i++){
 		product[i] = x_values[i]*y_values[i];

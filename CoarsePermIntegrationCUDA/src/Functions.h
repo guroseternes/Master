@@ -8,9 +8,6 @@ using namespace std;
 
 void computeRandomHeights(float min, float max, CpuPtr_2D &domain);
 void createReferenceTable(float g, float h, float delta_rho, float c_cap, float resolution, float* p_cap_ref_table, float* s_b_ref_table);
-void computeCapillaryPressure(float p_ci, float g, float delta_rho, float h, float dz, int n, float* p_cap_values);
-void inverseCapillaryPressure(int n, float g, float h, float delta_rho, float c_cap, float* p_cap_values, float* s_b_values);
-void computeMobility(int n, float* s_b_values, float lambda_end_point, float* mobility_values);
 void multiply(int n, float* x_values, float* y_values, float* product);
 void printArray(int n, float* array);
 

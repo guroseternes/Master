@@ -43,7 +43,7 @@ float c_cap = 1.0/6.0;
 
 // Permeability data (In real simulations this will be a table based on rock data, here we use a random distribution )
 float k_data[10] = {0.9352, 1.0444, 0.9947, 0.9305, 0.9682, 1.0215, 0.9383, 1.0477, 0.9486, 1.0835};
-float k_heights[10] = {10, 20, 25, 99, 155, 193, 205, 245, 267, 300};
+float k_heights[10] = {10, 20, 25, 32, 55, 63, 77, 86, 93, 100};
 
 //Inside Kernel
 // Converting the permeability data into a table of even subintervals in the z-directions
@@ -85,6 +85,7 @@ setCoarsePermIntegrationArgs(&coarse_perm_int_args,
 							k_heights_device.getRawPtr(),
 							p_cap_ref_table_device.getRawPtr(),
 							s_b_ref_table_device.getRawPtr(),
+							p_ci, g, delta_rho,
 							dz, nx, ny, 0);
 
 initAllocate(&coarse_perm_int_args);
