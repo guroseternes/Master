@@ -1,7 +1,9 @@
 #include <cassert>
 #include <iostream>
 #include <vector>
+#include <cuda.h>
 #include "GpuPtr.h"
+#include <cuda_runtime_api.h>
 
 GpuPtr_2D::GpuPtr_2D(unsigned int width, unsigned int height, int border, float* cpu_ptr) {
 	data_width = width + 2*border;
@@ -96,7 +98,7 @@ void GpuPtr_2D::set(float value, unsigned int x_offset, unsigned int y_offset, u
 void GpuPtr_1D::upload(const float* cpu_ptr, unsigned int x_offset, unsigned int width) {
 	width = (width == 0) ? data_width : width;
 
-	float* ptr1 = data_ptr + x_offset;
+	float* ptr1 = data.ptr + x_offset;
 	const float* ptr2 = cpu_ptr;
 
 	cudaMemcpy(ptr1, ptr2, width*sizeof(float), cudaMemcpyHostToDevice);
@@ -104,19 +106,19 @@ void GpuPtr_1D::upload(const float* cpu_ptr, unsigned int x_offset, unsigned int
 
 GpuPtr_1D::GpuPtr_1D(unsigned int width, float* cpu_ptr) {
 	data_width = width;
-	data_ptr = 0;
-	cudaMalloc((void**) &data_ptr, data_width*sizeof(float));
+	data.ptr = 0;
+	cudaMalloc((void**) &data.ptr, data_width*sizeof(float));
 	if (cpu_ptr != NULL) upload(cpu_ptr);
 }
 
 GpuPtr_1D::~GpuPtr_1D() {
-	cudaFree(data_ptr);
+	cudaFree(data.ptr);
 }
 
 void GpuPtr_1D::set(float value, unsigned int x_offset, unsigned int width) {
 	width = (width == 0) ? data_width : width;
 
-	float* ptr = data_ptr + x_offset;
+	float* ptr = data.ptr + x_offset;
 	std::vector<float> tmp(width, value);
 
 	cudaMemcpy(ptr, &tmp[0], width*sizeof(float), cudaMemcpyHostToDevice);

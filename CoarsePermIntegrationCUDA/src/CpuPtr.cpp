@@ -6,7 +6,7 @@
 #include <vector>
 #include "CpuPtr.h"
 
-CpuPtr_2D::CpuPtr_2D(unsigned int nx, unsigned int ny, unsigned int border, bool setToZero = false)
+CpuPtr_2D::CpuPtr_2D(unsigned int nx, unsigned int ny, unsigned int border, bool setToZero)
 : nx(nx), ny(ny), border(border), NX(nx+2*border), NY(ny+2*border), xmin(0), ymin(0), xmax(1.0), ymax(1.0),time(0){
 	allocateMemory();
 	if (setToZero){
@@ -74,7 +74,16 @@ CpuPtr_2D &CpuPtr_2D::operator = (const CpuPtr_2D &rhs){
 	}
 }
 
-/*void CpuPtr_2D::printToFile(FILE* filePtr, bool withHeader, bool withBorder){
+void CpuPtr_2D::printToFile(FILE* filePtr){
+	for (int j=0; j<ny; j++){
+		for (int i=0; i<nx; i++){
+			fprintf(filePtr, "%i\t%i\t%.3f\n", i, j, this->operator()(i,j));
+		}
+	}
+}
+
+/*
+void CpuPtr_2D::printToFile(FILE* filePtr, bool withHeader, bool withBorder){
 
 	float dx = (xmax - xmin)/(float)nx;
 	float dy = (ymax -ymin)/(float)ny;
@@ -99,7 +108,7 @@ CpuPtr_2D &CpuPtr_2D::operator = (const CpuPtr_2D &rhs){
 			}
 		}
 
-	}*/
+	}
+*/
 
-}
 

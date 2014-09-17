@@ -1,10 +1,13 @@
 #ifndef CPU_PTR_H_
 #define CPU_PTR_H_
 
+#include <iostream>
+#include <stdio.h>
+
 class CpuPtr_2D{
 public:
 	// Regular constructor
-	CpuPtr_2D(unsigned int nx, unsigned int ny, unsigned int border, bool setToZero = false);
+	CpuPtr_2D(unsigned int nx, unsigned int ny, unsigned int border, bool setToZero);
 
 	// Copy constructor
 	CpuPtr_2D(const CpuPtr_2D& other);
@@ -29,7 +32,7 @@ public:
 	// Access elements
 	float &operator()(unsigned int i, unsigned int j);
 
-	//void printToFile(FILE* filePtr, bool withHeader = false, bool withBorder = false);
+	void printToFile(FILE* filePtr); //, bool withHeader = false, bool withBorder = false);
 
 	private:
 		unsigned int nx, ny, border, NX, NY;

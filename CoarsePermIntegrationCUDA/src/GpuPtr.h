@@ -1,6 +1,12 @@
 #ifndef GPU_PTR_H_
 #define GPU_PTR_H_
 
+#include <cassert>
+#include <iostream>
+#include <vector>
+#include <cuda.h>
+#include "GpuPtr.h"
+#include <cuda_runtime_api.h>
 #include <cstddef>
 
 /**
@@ -70,16 +76,17 @@ public:
 	void upload(const float* cpu_ptr, unsigned int x_offset=0, unsigned int width=0);
 	//void set(int value, unsigned int x_offset=0, unsigned int width=0);
 	void set(float value, unsigned int x_offset=0, unsigned int width=0);
-	float* getRawPtr() const {
-		return data_ptr;
+	GpuRawPtr getRawPtr() const {
+		return data;
 	}
 	const unsigned int& getWidth() const {
 		return data_width;
 	}
 
 private:
-	float* data_ptr;
+	GpuRawPtr data;
 	unsigned int data_width;
 };
+
 
 #endif /* GPU_PTR_H_ */

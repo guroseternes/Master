@@ -5,10 +5,12 @@
 
 struct CoarsePermIntegrationKernelArgs {
 	GpuRawPtr K;
+	GpuRawPtr height_distribution;
 	GpuRawPtr k_data;
 	GpuRawPtr k_heights;
 	GpuRawPtr p_cap_ref_table;
 	GpuRawPtr s_b_ref_table;
+	float dz;
 	unsigned int nx, ny;
 	unsigned int border;
 };

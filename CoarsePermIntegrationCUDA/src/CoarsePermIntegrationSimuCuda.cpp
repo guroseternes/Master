@@ -1,26 +1,34 @@
-//#include "vector_types.h"
+#include <iostream>
+#include <stdio.h>
 #include "GpuPtr.h"
 #include "CpuPtr.h"
 #include "Kernels.h"
 #include "Functions.h"
+#include "Util.h"
 #include "cuda.h"
 
+// Max number of intervals
+const int N = 100;
 // Dimensions
 // Grid
-int nx = 200;
-int ny = 200;
-// Length of sub intervals
-float dz = 1;
+unsigned int nx = 10;
+unsigned int ny = 10;
 // Maximum height of aquifer
-float H;
+float H = 80;
 // Max number of intervals
-int N = H/dz;
+float dz = 1;
 
 // GPU
 int block_x = 16;
 int block_y = 16;
 
 int main() {
+
+// Files with results
+FILE* K_integration_file;
+K_integration_file = fopen("K_integration.txt", "w");
+FILE* height_distribution_file;
+height_distribution_file = fopen("height_distribution.txt", "w");
 
 // Height of the capillary interface for the grid
 CpuPtr_2D height_distribution(nx, ny, 0, true);
@@ -32,9 +40,10 @@ float delta_rho = 500;
 float g = 9.87;
 // Non-dimensional constant that scales the strength of the capillary forces
 float c_cap = 1.0/6.0;
+
 // Permeability data (In real simulations this will be a table based on rock data, here we use a random distribution )
 float k_data[10] = {0.9352, 1.0444, 0.9947, 0.9305, 0.9682, 1.0215, 0.9383, 1.0477, 0.9486, 1.0835};
-float k_heights[10] = {10, 20, 25, 100, 155, 193, 205, 245, 267, 300};
+float k_heights[10] = {10, 20, 25, 99, 155, 193, 205, 245, 267, 300};
 
 //Inside Kernel
 // Converting the permeability data into a table of even subintervals in the z-directions
@@ -46,38 +55,52 @@ float k_heights[10] = {10, 20, 25, 100, 155, 193, 205, 245, 267, 300};
 // Pressure at capillary interface, which is known
 float p_ci = 1;
 // Table of capillary pressure values for our subintervals along the z-axis ranging from 0 to h
-float resolution = 0.0k;
-int size = 1/resolution + 1;
+float resolution = 0.01;
+int size = (int)(1.0/resolution) + 1;
+
 float p_cap_ref_table[size];
 float s_b_ref_table[size];
+
 createReferenceTable(g, H, delta_rho, c_cap, resolution, p_cap_ref_table, s_b_ref_table);
 
 // Set block and grid sizes and initialize gpu pointer
 dim3 grid;
 dim3 block;
-computeGridBlock(dim3& grid, dim3& block, nx, ny, block_x, block_y);
+computeGridBlock(grid, block, nx, ny, block_x, block_y);
 
 // Allocate and set data on the GPU
 GpuPtr_2D Lambda_device(nx, ny, 0, NULL);
+GpuPtr_2D height_distribution_device(nx, ny, 0, height_distribution.getPtr());
 GpuPtr_1D k_data_device(10, k_data);
 GpuPtr_1D k_heights_device(10, k_heights);
 GpuPtr_1D p_cap_ref_table_device(size, p_cap_ref_table);
 GpuPtr_1D s_b_ref_table_device(size, s_b_ref_table);
 
-cudaHostAlloc(&args, sizeof(CoarsePermIntegrationKernelArgs), cudaHostAllocWriteCombined);
-
 // Set arguments and run coarse integration kernel
-CoarsePermIntegrationArgs coarse_perm_int_args;
-setCoarsePermIntegrationArgs(coarse_perm_int_args,\
-							Lambda_device.getRawPtr(),\
-							k_data_device.getRawPtr(),\
-							k_heights_device.getRawPtr(),\
-							p_cap_ref_table_device.getRawPtr(),\
-							s_b_ref_table_device.getRawPtr(),\
-							nx, ny, 0);
-callCoarseIntegrationKernel(grid, block, coarse_perm_int_args);
+CoarsePermIntegrationKernelArgs coarse_perm_int_args;
+setCoarsePermIntegrationArgs(&coarse_perm_int_args,
+							Lambda_device.getRawPtr(),
+							height_distribution_device.getRawPtr(),
+							k_data_device.getRawPtr(),
+							k_heights_device.getRawPtr(),
+							p_cap_ref_table_device.getRawPtr(),
+							s_b_ref_table_device.getRawPtr(),
+							dz, nx, ny, 0);
 
-float p_cap_values[n+1];
+initAllocate(&coarse_perm_int_args);
+
+callCoarsePermIntegrationKernel(grid, block, &coarse_perm_int_args);
+
+printf("%s\n", cudaGetErrorString(cudaGetLastError()));
+
+height_distribution.printToFile(height_distribution_file);
+Lambda_device.download(height_distribution.getPtr(),0,0,nx,ny);
+printf("%s\n", cudaGetErrorString(cudaGetLastError()));
+printf("hd: %.3f", height_distribution(0,0));
+height_distribution.printToFile(K_integration_file);
+
+
+/*float p_cap_values[n+1];
 computeCapillaryPressure(p_ci, g, delta_rho, h, dz, n, p_cap_values);
 float s_b_values[n+1];
 inverseCapillaryPressure(n, g, h, delta_rho, c_cap, p_cap_values, s_b_values);
@@ -95,7 +118,8 @@ multiply(n+1, lambda_values, k_values, f_values);
 float K = trapezoidal(dz, n, k_values);
 float L = trapezoidal(dz, n, f_values)/K;
 printf("Value of integral K. %.4f", K);
-printf("Value of integral L. %.4f", L);
+printf("Value of integral L. %.4f", L);*/
+
 
 }
 
