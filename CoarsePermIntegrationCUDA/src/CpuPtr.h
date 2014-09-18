@@ -6,6 +6,9 @@
 
 class CpuPtr_2D{
 public:
+	// Trivial Constructor
+	CpuPtr_2D();
+
 	// Regular constructor
 	CpuPtr_2D(unsigned int nx, unsigned int ny, unsigned int border, bool setToZero);
 

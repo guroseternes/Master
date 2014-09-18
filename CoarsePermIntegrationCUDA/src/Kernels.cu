@@ -23,6 +23,12 @@ __device__ int kDistribution(float dz, float h, float* k_heights, float* k_data,
 	return j;
 }
 
+__device__ void multiply(int n, float* x_values, float* y_values, float* product){
+	for (int i = 0; i < n; i++){
+		product[i] = x_values[i]*y_values[i];
+	}
+}
+
 // Function to compute the capillary pressure in the subintervals
 __device__ void computeCapillaryPressure(float p_ci, float g, float delta_rho, float h, float dz, int n, float* p_cap_values){
 	for (int i = 0; i < n+1 ; i++){
@@ -86,11 +92,16 @@ __global__ void CoarsePermIntegrationKernel(){
 		computeCapillaryPressure(cpi_ctx.p_ci, cpi_ctx.g, cpi_ctx.delta_rho,
 								 h, cpi_ctx.dz, n, p_cap_values);
 
+
 		inverseCapillaryPressure(n, p_cap_values, cpi_ctx.p_cap_ref_table.ptr, cpi_ctx.s_b_ref_table.ptr);
 
 		computeMobility(n, p_cap_values);
 
-		global_index(cpi_ctx.K.ptr, cpi_ctx.K.pitch, xid, yid)[0] = K;
+		multiply(n, k_values, p_cap_values, k_values);
+
+		float L = trapezoidal(cpi_ctx.dz, n-1, k_values)/K;
+
+		global_index(cpi_ctx.K.ptr, cpi_ctx.K.pitch, xid, yid)[0] = L;
     }
 }
 
