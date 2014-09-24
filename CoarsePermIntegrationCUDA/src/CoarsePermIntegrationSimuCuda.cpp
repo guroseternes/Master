@@ -7,21 +7,57 @@
 #include "Util.h"
 #include "cuda.h"
 #include "InitialConditions.h"
+#include "matio.h"
+#include <memory.h>
 
 // Max number of intervals
 const int N = 100;
 
 int main() {
 
+	char* filename = "test.mat";
+	mat_t *matfp;
+	matvar_t *matvar;
+	matfp = Mat_Open("test.mat",MAT_ACC_RDONLY);
+	if ( NULL == matfp ) {
+		fprintf(stderr,"Error opening MAT file");
+		return EXIT_FAILURE;
+	}
+
+	matvar = Mat_VarReadNextInfo(matfp);
+	printf("Variable: %s\n",matvar->name);
+	Mat_VarReadDataAll(matfp, matvar);
+	int nx = matvar->dims[0];
+	int ny = matvar->dims[1];
+	int size = nx*ny;
+	float H[size];
+	memcpy(H, matvar->data,sizeof(float)*size);
+	Mat_VarFree(matvar);
+	matvar = NULL;
+
+	matvar = Mat_VarReadNextInfo(matfp);
+	printf("Variable: %s\n",matvar->name);
+	Mat_VarReadDataAll(matfp, matvar);
+	float top_surface[size];
+	memcpy(top_surface, matvar->data,sizeof(float)*size);
+	Mat_VarFree(matvar);
+	matvar = NULL;
+
+	printf("%.4f", H[6]);
+	printf("%.4f", top_surface[6]);
+
+	float max_height = maximum(1032, H);
+
 // Files with results
-FILE* K_integration_file;
-K_integration_file = fopen("K_integration.txt", "w");
-FILE* height_distribution_file;
-height_distribution_file = fopen("height_distribution.txt", "w");
+FILE* Lambda_integration_file;
+Lambda_integration_file = fopen("Lambda_integration.txt", "w");
+
+// Cpu Pointer to stor the results
+CpuPtr_2D Lambda(nx, ny, 0, true);
 
 // Initial Conditions
-InitialConditions IC(10, 10, 80);
-IC.computeRandomHeights();
+InitialConditions IC(nx, ny, max_height);
+IC.H = H;
 IC.createReferenceTable();
 
 // GPU
@@ -32,15 +68,10 @@ int block_y = 16;
 dim3 grid;
 dim3 block;
 computeGridBlock(grid, block, IC.nx, IC.ny, block_x, block_y);
-for (int i = 0; i < 10; i++){
-	//for (int j = 0; j < 10; j++){
-		printf("%.3f ", IC.p_cap_ref_table[i]);
-	//}
-}
 
 // Allocate and set data on the GPU
 GpuPtr_2D Lambda_device(IC.nx, IC.ny, 0, NULL);
-GpuPtr_2D height_distribution_device(IC.nx, IC.ny, 0, IC.height_distribution.getPtr());
+GpuPtr_2D H_distribution_device(IC.nx, IC.ny, 0, IC.H);
 GpuPtr_1D k_data_device(10, IC.k_data);
 GpuPtr_1D k_heights_device(10, IC.k_heights);
 GpuPtr_1D p_cap_ref_table_device(IC.size_tables, IC.p_cap_ref_table);
@@ -50,7 +81,7 @@ GpuPtr_1D s_b_ref_table_device(IC.size_tables, IC.s_b_ref_table);
 CoarsePermIntegrationKernelArgs coarse_perm_int_args;
 setCoarsePermIntegrationArgs(&coarse_perm_int_args,
 							Lambda_device.getRawPtr(),
-							height_distribution_device.getRawPtr(),
+							H_distribution_device.getRawPtr(),
 							k_data_device.getRawPtr(),
 							k_heights_device.getRawPtr(),
 							p_cap_ref_table_device.getRawPtr(),
@@ -64,11 +95,10 @@ callCoarsePermIntegrationKernel(grid, block, &coarse_perm_int_args);
 
 printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 
-IC.height_distribution.printToFile(height_distribution_file);
-Lambda_device.download(IC.height_distribution.getPtr(),0,0,IC.nx,IC.ny);
+//IC.height_distribution.printToFile(height_distribution_file);
+Lambda_device.download(Lambda.getPtr(),0,0,IC.nx,IC.ny);
 printf("%s\n", cudaGetErrorString(cudaGetLastError()));
-printf("hd: %.6f", IC.height_distribution(0,0));
-IC.height_distribution.printToFile(K_integration_file);
+Lambda.printToFile(Lambda_integration_file);
 
 }
 

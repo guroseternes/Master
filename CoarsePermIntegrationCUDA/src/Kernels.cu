@@ -75,8 +75,8 @@ __global__ void CoarsePermIntegrationKernel(){
     int yid = blockIdx.y*blockDim.y + threadIdx.y;
 
     if ( xid < 10 && yid < 10 ){
-		// Get local height
-		float h = global_index(cpi_ctx.height_distribution.ptr,
+		// Get full local height
+		float H = global_index(cpi_ctx.height_distribution.ptr,
 							   cpi_ctx.height_distribution.pitch, xid, yid)[0];
 		float k_values[101];
 		float p_cap_values[101];

@@ -1,9 +1,9 @@
 #include "InitialConditions.h"
 
-InitialConditions::InitialConditions(int nx, int ny, float H){
+InitialConditions::InitialConditions(int nx, int ny, float max_height){
 	this->nx = nx;
 	this->ny = ny;
-	this->H = H;
+	this->max_height = max_height;
 	this->dz = 1;
 	// Density difference between brine and CO2
 	this->delta_rho = 500;
@@ -23,15 +23,15 @@ InitialConditions::InitialConditions(int nx, int ny, float H){
 	for (int i = 0; i < 10; i++){
 		this->k_data[i] = data[i];
 	}
-	float heights[10] =  {10, 20, 25, 32, 55, 63, 77, 86, 93, 100};
+	float heights[10] =  {10, 20, 150, 220, 240, 255, 301, 323, 380, 400};
 	this->k_heights = new float[10];
 	for (int i = 0; i < 10; i++){
 		this->k_heights[i] = heights[i];
 	}
 }
 
-void InitialConditions::computeRandomHeights(){
-	/* initialize random seed: */
+/*void InitialConditions::computeRandomHeights(){
+	 initialize random seed:
 	srand (time(NULL));
 	height_distribution = CpuPtr_2D(nx, ny, 0, true);
 	for (int j = 0; j < nx; j++){
@@ -39,7 +39,7 @@ void InitialConditions::computeRandomHeights(){
 			height_distribution(i,j) = 50 + j - i;
 		}
 	}
-}
+}*/
 
 // Reference table for conversion between saturation and capillary pressure
 void InitialConditions::createReferenceTable(){

@@ -5,6 +5,22 @@
 #include "GpuPtr.h"
 #include <cuda_runtime_api.h>
 
+GpuPtr_3D::GpuPtr_3D(unsigned int width, unsigned int height, unsigned int depth, int border, float* cpu_ptr) {
+	data_width = width + 2*border;
+	data_height = height + 2*border;
+	data_depth = depth;
+	cudaExtent extent;
+	extent.depth = data_depth;
+	extent.height = data_height;
+	extent.width = data_width;
+	data_border = border;
+	data.ptr = 0;
+	data.pitch = 0;
+
+	cudaMallocPitch((void**) &data.ptr, &data.pitch, data_width*sizeof(float), data_height);
+	if (cpu_ptr != NULL) upload(cpu_ptr);
+}
+
 GpuPtr_2D::GpuPtr_2D(unsigned int width, unsigned int height, int border, float* cpu_ptr) {
 	data_width = width + 2*border;
 	data_height = height + 2*border;

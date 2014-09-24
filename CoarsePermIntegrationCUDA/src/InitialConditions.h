@@ -14,15 +14,14 @@ struct CoarsePermIC {
 
 class InitialConditions{
 public:
-	InitialConditions(int nx, int ny, float H);
+	InitialConditions(int nx, int ny, float max_height);
 	void createReferenceTable();
-	void computeRandomHeights();
+	//void computeRandomHeights();
 
 	unsigned int nx;
 	unsigned int ny;
 	float dz;
-	//max_height
-	float H;
+	float max_height;
 
 	float delta_rho;
 	float g;
@@ -39,7 +38,7 @@ public:
 	float* s_b_ref_table;
 	float size_tables;
 
-	CpuPtr_2D height_distribution;
+	float* H;
 
 private:
 	CoarsePermIC coarse_perm_IC;
