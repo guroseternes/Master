@@ -2,9 +2,11 @@
 #define N 100;
 
 __constant__ CoarsePermIntegrationKernelArgs cpi_ctx;
+__constant__ CoarseMobIntegrationKernelArgs cmi_ctx;
 
-void initAllocate(CoarsePermIntegrationKernelArgs* args){
-	cudaHostAlloc(&args, sizeof(CoarsePermIntegrationKernelArgs), cudaHostAllocWriteCombined);
+void initAllocate(CoarsePermIntegrationKernelArgs* args1, CoarseMobIntegrationKernelArgs* args2){
+	cudaHostAlloc(&args1, sizeof(CoarsePermIntegrationKernelArgs), cudaHostAllocWriteCombined);
+	cudaHostAlloc(&args2, sizeof(CoarseMobIntegrationKernelArgs), cudaHostAllocWriteCombined);
 }
 
 // Function to create an array of the permeability on the subintervals
@@ -59,25 +61,54 @@ __device__ float* global_index(float* base, unsigned int pitch, int x, int y, in
         return (float*) ((char*) base+(y+border)*pitch) + (x+border);
 }
 
+__device__ float* global_index(cudaPitchedPtr ptr, int x, int y, int z, int border = 0) {
+        return (float*) ((char*) (ptr.ptr+(x+border)*(ptr.ysize)*ptr.pitch)) + (y+border)*(ptr.pitch/sizeof(float)) + z;
+    //	return data[(i+border)*(ny+2*border)*(nz) + nz*(j+border) + k];
+}
+
 __device__ float trapezoidal(float dz, int n, float* function_values){
 	float sum = 0;
 	sum += 0.5*(function_values[0] + function_values[n]);
-	for (int i = 1; i < n; i++){
-		sum += function_values[i];
+	if ( n > 1){
+		for (int i = 1; i < (n-1); i++){
+			sum += function_values[i];
+		}
 	}
 	return sum*dz;
 }
-
-
 __global__ void CoarsePermIntegrationKernel(){
+
+	int xid = blockIdx.x*blockDim.x + threadIdx.x;
+    int yid = blockIdx.y*blockDim.y + threadIdx.y;
+
+    if ( xid < cpi_ctx.nx && yid < cpi_ctx.ny ){
+		float H = global_index(cpi_ctx.height_distribution.ptr,
+							   cpi_ctx.height_distribution.pitch, xid, yid)[0];
+		float* k_values = global_index(cpi_ctx.perm_distribution, xid, yid, 0);
+		int n = global_index(cpi_ctx.nIntervals_dist.ptr,
+							 cpi_ctx.nIntervals_dist.pitch, xid, yid)[0];
+		float K = trapezoidal(cpi_ctx.dz, n, k_values);
+		global_index(cpi_ctx.K.ptr, cpi_ctx.K.pitch, xid, yid)[0] = K;
+    }
+}
+
+void callCoarsePermIntegrationKernel(dim3 grid, dim3 block, CoarsePermIntegrationKernelArgs* args){
+	cudaMemcpyToSymbolAsync(cpi_ctx, args, sizeof(CoarsePermIntegrationKernelArgs), 0, cudaMemcpyHostToDevice);
+	CoarsePermIntegrationKernel<<<grid, block>>>();
+}
+
+
+__global__ void CoarseMobIntegrationKernel(){
 
 	int xid = blockIdx.x*blockDim.x + threadIdx.x;
     int yid = blockIdx.y*blockDim.y + threadIdx.y;
 
     if ( xid < 10 && yid < 10 ){
 		// Get full local height
-		float H = global_index(cpi_ctx.height_distribution.ptr,
-							   cpi_ctx.height_distribution.pitch, xid, yid)[0];
+		float H = global_index(cmi_ctx.height_distribution.ptr,
+							   cmi_ctx.height_distribution.pitch, xid, yid)[0];
+		float h = H;
+
 		float k_values[101];
 		float p_cap_values[101];
 
@@ -86,27 +117,27 @@ __global__ void CoarsePermIntegrationKernel(){
 			p_cap_values[i] = 0;
 		}
 
-		int n = kDistribution(cpi_ctx.dz, h, cpi_ctx.k_heights.ptr, cpi_ctx.k_data.ptr, k_values);
-		float K = trapezoidal(cpi_ctx.dz, n-1, k_values);
-
-		computeCapillaryPressure(cpi_ctx.p_ci, cpi_ctx.g, cpi_ctx.delta_rho,
-								 h, cpi_ctx.dz, n, p_cap_values);
+		int n = kDistribution(cmi_ctx.dz, h, cmi_ctx.k_heights.ptr, cmi_ctx.k_data.ptr, k_values);
 
 
-		inverseCapillaryPressure(n, p_cap_values, cpi_ctx.p_cap_ref_table.ptr, cpi_ctx.s_b_ref_table.ptr);
+		computeCapillaryPressure(cmi_ctx.p_ci, cmi_ctx.g, cmi_ctx.delta_rho,
+								 h, cmi_ctx.dz, n, p_cap_values);
+
+
+		inverseCapillaryPressure(n, p_cap_values, cmi_ctx.p_cap_ref_table.ptr, cmi_ctx.s_b_ref_table.ptr);
 
 		computeMobility(n, p_cap_values);
 
 		multiply(n, k_values, p_cap_values, k_values);
 
-		float L = trapezoidal(cpi_ctx.dz, n-1, k_values)/K;
+		//float L = trapezoidal(cmi_ctx.dz, n-1, k_values)/K;
 
-		global_index(cpi_ctx.K.ptr, cpi_ctx.K.pitch, xid, yid)[0] = L;
+		//global_index(cmi_ctx.K.ptr, cmi_ctx.K.pitch, xid, yid)[0] = L;
     }
 }
 
 
-void callCoarsePermIntegrationKernel(dim3 grid, dim3 block, CoarsePermIntegrationKernelArgs* args){
-	cudaMemcpyToSymbolAsync(cpi_ctx, args, sizeof(CoarsePermIntegrationKernelArgs), 0, cudaMemcpyHostToDevice);
-	CoarsePermIntegrationKernel<<<grid, block>>>();
+void callCoarseMobIntegrationKernel(dim3 grid, dim3 block, CoarseMobIntegrationKernelArgs* args){
+	cudaMemcpyToSymbolAsync(cmi_ctx, args, sizeof(CoarseMobIntegrationKernelArgs), 0, cudaMemcpyHostToDevice);
+	CoarseMobIntegrationKernel<<<grid, block>>>();
 }

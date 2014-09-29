@@ -4,7 +4,7 @@ InitialConditions::InitialConditions(int nx, int ny, float max_height){
 	this->nx = nx;
 	this->ny = ny;
 	this->max_height = max_height;
-	this->dz = 1;
+	this->dz = max_height/100;
 	// Density difference between brine and CO2
 	this->delta_rho = 500;
 	// Gravitational acceleration
@@ -48,7 +48,7 @@ void InitialConditions::createReferenceTable(){
 	s_b_ref_table = new float[n+1];
 	for (int i = 0; i < n+1; i++){
 		// Insert equation for analytic capillary pressure curve
-		p_cap_ref_table[n-i] = delta_rho*g*H*c_cap*pow(resolution*i,-0.5f);
+		p_cap_ref_table[n-i] = delta_rho*g*80*c_cap*pow(resolution*i,-0.5f);
 		s_b_ref_table[n-i] = resolution*i;
 	}
 }

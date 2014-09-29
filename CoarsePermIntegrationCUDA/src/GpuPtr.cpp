@@ -4,22 +4,84 @@
 #include <cuda.h>
 #include "GpuPtr.h"
 #include <cuda_runtime_api.h>
+#include <stdio.h>
 
-GpuPtr_3D::GpuPtr_3D(unsigned int width, unsigned int height, unsigned int depth, int border, float* cpu_ptr) {
-	data_width = width + 2*border;
+GpuPtr_3D::GpuPtr_3D(unsigned int nx, unsigned int ny, unsigned int nz, int border, float* cpu_ptr) {
+/*	data_width = width + 2*border;
 	data_height = height + 2*border;
 	data_depth = depth;
-	cudaExtent extent;
-	extent.depth = data_depth;
-	extent.height = data_height;
-	extent.width = data_width;
+*/	cudaExtent extent;
+	extent.depth = nx;
+	extent.height = ny;
+	extent.width = nz*sizeof(float);
 	data_border = border;
 	data.ptr = 0;
 	data.pitch = 0;
-
-	cudaMallocPitch((void**) &data.ptr, &data.pitch, data_width*sizeof(float), data_height);
-	if (cpu_ptr != NULL) upload(cpu_ptr);
+	cudaMalloc3D(&data, extent);
+	printf("Malloc 3D %s\n", cudaGetErrorString(cudaGetLastError()));
+	printf("Pitch Gpu %i\n", data.pitch);
+	printf("xsize Gpu %i\n", data.xsize);
+	printf("ysize Gpu %i\n", data.ysize);
+	if (cpu_ptr != NULL) upload(cpu_ptr, nx, ny, nz);
 }
+
+void GpuPtr_3D::upload(float* cpu_ptr, unsigned int nx, unsigned int ny, unsigned int nz){
+	/*width = (width == 0) ? data_width :width;
+	height = (height == 0) ? data_height : height;
+	depth = (depth == 0) ? data_depth : depth;
+	*/
+	cudaMemcpy3DParms params = {0};
+	cudaPitchedPtr srcPtr; // = make_cudaPitchedPtr(cpu_ptr, width*sizeof(float), width, height);
+	srcPtr.ptr = cpu_ptr;
+	srcPtr.pitch = nz*sizeof(float);
+	srcPtr.xsize = nz;
+	srcPtr.ysize = ny;
+	params.srcPtr = srcPtr;
+	params.dstPtr = data;
+
+	cudaExtent extent;
+	extent.width = nz*sizeof(float);
+	extent.height = ny;
+	extent.depth = nx;
+	params.extent = extent;
+	params.kind = cudaMemcpyHostToDevice;
+
+	printf("nz in upload %i\n", nz);
+	cudaMemcpy3D(&params);
+	printf("Error upload %s\n", cudaGetErrorString(cudaGetLastError()));
+}
+
+
+GpuPtr_3D::~GpuPtr_3D() {
+	cudaFree(data.ptr);
+}
+
+void GpuPtr_3D::download(float* cpu_ptr, unsigned int nx, unsigned int ny, unsigned int nz){
+	/*width = (width == 0) ? data_width :width;
+	height = (height == 0) ? data_height : height;
+	depth = (depth == 0) ? data_depth : depth;
+*/
+	cudaMemcpy3DParms params;
+	params.srcPtr = data;
+	cudaPitchedPtr dstPtr;
+	dstPtr.ptr = cpu_ptr;
+	dstPtr.pitch = nz*sizeof(float);
+	dstPtr.xsize = nz;
+	dstPtr.ysize = ny;
+	params.dstPtr = dstPtr;
+	cudaExtent extent;
+	extent.depth = nx;
+	extent.height = ny;
+	extent.width = nz*sizeof(float);
+	params.extent = extent;
+	params.kind = cudaMemcpyDeviceToHost;
+
+	cudaMemcpy3D(&params);
+	printf("Error %s\n", cudaGetErrorString(cudaGetLastError()));
+
+}
+
+
 
 GpuPtr_2D::GpuPtr_2D(unsigned int width, unsigned int height, int border, float* cpu_ptr) {
 	data_width = width + 2*border;

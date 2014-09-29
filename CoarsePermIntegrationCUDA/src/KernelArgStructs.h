@@ -6,6 +6,16 @@
 struct CoarsePermIntegrationKernelArgs {
 	GpuRawPtr K;
 	GpuRawPtr height_distribution;
+	GpuRawPtr nIntervals_dist;
+	cudaPitchedPtr perm_distribution;
+	float dz;
+	unsigned int nx, ny, nz;
+	unsigned int border;
+};
+
+struct CoarseMobIntegrationKernelArgs {
+	GpuRawPtr Lambda;
+	GpuRawPtr height_distribution;
 	GpuRawPtr k_data;
 	GpuRawPtr k_heights;
 	GpuRawPtr p_cap_ref_table;

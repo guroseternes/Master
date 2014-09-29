@@ -6,6 +6,62 @@
 #include <vector>
 #include "CpuPtr.h"
 
+CpuPtr_3D::CpuPtr_3D(unsigned int nx, unsigned int ny, unsigned int nz, unsigned int border, bool setToZero)
+: nx(nx), ny(ny), nz(nz), border(border), NX(nx+2*border), NY(ny+2*border), NZ(nz), xmin(0), ymin(0), xmax(1.0), ymax(1.0),time(0){
+	allocateMemory();
+	if (setToZero){
+		for (int k = 0; k < NZ; k++){
+			for (int j = 0; j < NY; j++){
+				for (int i = 0; i < NX; i++){
+					this->operator()(i-border,j-border, k) = 0.0;
+				}
+			}
+		}
+	}
+}
+
+CpuPtr_3D::~CpuPtr_3D(){
+	delete [] data;
+}
+
+float &CpuPtr_3D::operator() (unsigned int i, unsigned int j, unsigned int k){
+	return data[(i+border)*(ny+2*border)*(nz) + nz*(j+border) + k];
+}
+
+void CpuPtr_3D::allocateMemory(){
+	data = new float[NX*NY*NZ];
+}
+
+int CpuPtr_3D::getNx(){
+	return nx;
+}
+
+int CpuPtr_3D::getNy(){
+	return ny;
+}
+
+int CpuPtr_3D::getNz(){
+	return nz;
+}
+
+float CpuPtr_3D::getDx(){
+	return ((xmax - xmin)/(float)nx);
+}
+
+float CpuPtr_3D::getDy(){
+	return ((ymax - ymin)/(float)ny);
+}
+
+/*float CpuPtr_3D::getDz(){
+	return ((zmax - zmin)/(float)nz);
+}*/
+
+
+void CpuPtr_3D::setTime(float t){
+	time = t;
+}
+
+
 CpuPtr_2D::CpuPtr_2D()
 : nx(1), ny(1), border(0), NX(nx+2*border), NY(ny+2*border), xmin(0), ymin(0), xmax(1.0), ymax(1.0),time(0){
 	allocateMemory();
@@ -47,19 +103,19 @@ void CpuPtr_2D::allocateMemory(){
 	data = new float[NX*NY];
 }
 
-int CpuPtr_2D::get_nx(){
+int CpuPtr_2D::getNx(){
 	return nx;
 }
 
-int CpuPtr_2D::get_ny(){
+int CpuPtr_2D::getNy(){
 	return ny;
 }
 
-float CpuPtr_2D::get_dx(){
+float CpuPtr_2D::getDx(){
 	return ((xmax - xmin)/(float)nx);
 }
 
-float CpuPtr_2D::get_dy(){
+float CpuPtr_2D::getDy(){
         return ((ymax - ymin)/(float)ny);
 }
 

@@ -18,15 +18,21 @@ public:
 	size_t pitch; //!< Pitch in bytes of allocated m
 };
 
+class GpuRawPtr_3D {
+public:
+	cudaPitchedPtr data;   //!< pointer to allocated memory
+//!< Pitch in bytes of allocated m
+};
+
 class GpuPtr_3D{
 public:
 	// Allocating data on the GPU
-	GpuPtr_3D(unsigned int width, unsigned int height, int border = 0, float* cpu_ptr=NULL);
+	GpuPtr_3D(unsigned int width, unsigned int height, unsigned int depth, int border = 0, float* cpu_ptr=NULL);
 
 	//Deallocates the data
 	~GpuPtr_3D();
 
-	const GpuRawPtr& getRawPtr() const {
+	const cudaPitchedPtr& getRawPtr() const {
 		return data;
 	}
 	const unsigned int& getWidth() const {
@@ -39,13 +45,17 @@ public:
         return data_border;
     }
 
-	void download(float* cpu_ptr,
-			unsigned int x_offset=0, unsigned int y_offset=0,
-			unsigned int width=0, unsigned int height=0);
+	void download(float* cpu_ptr, unsigned int width, unsigned int height, unsigned int depth);
 
 	// Perform CPU to GPU copy of a witdh x height domain starting at x_offset and y_offset on the cpu_ptr.
-	void upload(const float* cpu_ptr, unsigned int x_offset=0, unsigned int y_offset=0,
-    		unsigned int width=0, unsigned int height=0);
+	void upload(float* cpu_ptr, unsigned int x_offset=0, unsigned int y_offset=0, unsigned int z_offset=0);
+
+private:
+	cudaPitchedPtr data;
+	unsigned int data_width;
+	unsigned int  data_height;
+	unsigned int data_depth;
+	int data_border;
 };
 
 class GpuPtr_2D {

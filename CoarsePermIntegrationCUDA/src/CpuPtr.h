@@ -4,6 +4,44 @@
 #include <iostream>
 #include <stdio.h>
 
+class CpuPtr_3D{
+public:
+	// Trivial Constructor
+	CpuPtr_3D();
+
+	// Regular constructor
+	CpuPtr_3D(unsigned int nx, unsigned int ny, unsigned int nz, unsigned int border, bool setToZero);
+
+	// Deconstructor
+	~CpuPtr_3D();
+
+	float xmin, xmax, ymin, ymax; // zmin, zmax;
+
+	int getNx();
+	int getNy();
+	int getNz();
+
+	float getDx();
+	float getDy();
+	float getDz();
+
+	float* getPtr(){return data;};
+
+	void setTime(float time);
+
+	// Access elements
+	float &operator()(unsigned int i, unsigned int j, unsigned int k);
+
+	void printToFile(FILE* filePtr); //, bool withHeader = false, bool withBorder = false);
+
+	private:
+		unsigned int nx, ny, nz, border, NX, NY, NZ;
+		float time;
+		float *data;
+		void allocateMemory();
+};
+
+
 class CpuPtr_2D{
 public:
 	// Trivial Constructor
@@ -20,11 +58,11 @@ public:
 
 	float xmin, xmax, ymin, ymax;
 
-	int get_nx();
-	int get_ny();
+	int getNx();
+	int getNy();
 
-	float get_dx();
-	float get_dy();
+	float getDx();
+	float getDy();
 
 	float* getPtr(){return data;};
 
