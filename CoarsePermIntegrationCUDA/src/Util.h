@@ -6,7 +6,6 @@
 #include <cuda_runtime_api.h>
 #include "KernelArgStructs.h"
 
-void computeGridBlock(dim3& grid, dim3& block, int NX, int NY, int block_x, int block_y);
 
 void setCoarsePermIntegrationKernelArgs(CoarsePermIntegrationKernelArgs* args, GpuRawPtr K, GpuRawPtr H,
 										cudaPitchedPtr k, GpuRawPtr nI,
@@ -15,9 +14,11 @@ void setCoarsePermIntegrationKernelArgs(CoarsePermIntegrationKernelArgs* args, G
 
 // set arguments for the coarse permeability integration
 void setCoarseMobIntegrationArgs(CoarseMobIntegrationKernelArgs* args,
-								  GpuRawPtr K, GpuRawPtr h, GpuRawPtr k_data, GpuRawPtr k_heights,
-								  GpuRawPtr p_cap_ref_table, GpuRawPtr s_b_ref_table,
-								  float p_ci, float g, float rho_delta,
+								  GpuRawPtr Lambda, GpuRawPtr H, GpuRawPtr h, cudaPitchedPtr k,
+								  GpuRawPtr K, GpuRawPtr nI,
+								  GpuRawPtr p_cap_ref_table,
+								  GpuRawPtr s_c_ref_table,
+								  float p_ci, float g, float delta_rho,
 								  float dz, unsigned int nx, unsigned int ny, unsigned int border);
-
+void computeGridBlock(dim3& grid, dim3& block, int NX, int NY, int block_x, int block_y);
 #endif /* UTIL_H_ */

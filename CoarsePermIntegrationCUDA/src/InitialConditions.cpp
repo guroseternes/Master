@@ -10,7 +10,7 @@ InitialConditions::InitialConditions(int nx, int ny, float max_height){
 	// Gravitational acceleration
 	this->g = 9.87;
 	// Non-dimensional constant that scales the strength of the capillary forces
-	this->c_cap = 1.0/6.0;
+	this->c_cap = 1.0/90.0;
 	// Pressure at capillary interface, which is known
 	this-> p_ci = 1;
 	// Table of capillary pressure values for our subintervals along the z-axis ranging from 0 to h
@@ -44,11 +44,11 @@ InitialConditions::InitialConditions(int nx, int ny, float max_height){
 // Reference table for conversion between saturation and capillary pressure
 void InitialConditions::createReferenceTable(){
 	int n = 1/resolution;
-	p_cap_ref_table = new float[n+1];
-	s_b_ref_table = new float[n+1];
-	for (int i = 0; i < n+1; i++){
+	p_cap_ref_table = new float[n];
+	s_c_ref_table = new float[n];
+	for (int i = 0; i < n; i++){
 		// Insert equation for analytic capillary pressure curve
-		p_cap_ref_table[n-i] = delta_rho*g*80*c_cap*pow(resolution*i,-0.5f);
-		s_b_ref_table[n-i] = resolution*i;
+		p_cap_ref_table[n-i-1] = delta_rho*g*max_height*c_cap*pow(1-resolution*i,-0.5f);
+		s_c_ref_table[n-i-1] = resolution*i;
 	}
 }

@@ -19,9 +19,6 @@ GpuPtr_3D::GpuPtr_3D(unsigned int nx, unsigned int ny, unsigned int nz, int bord
 	data.pitch = 0;
 	cudaMalloc3D(&data, extent);
 	printf("Malloc 3D %s\n", cudaGetErrorString(cudaGetLastError()));
-	printf("Pitch Gpu %i\n", data.pitch);
-	printf("xsize Gpu %i\n", data.xsize);
-	printf("ysize Gpu %i\n", data.ysize);
 	if (cpu_ptr != NULL) upload(cpu_ptr, nx, ny, nz);
 }
 
@@ -80,8 +77,6 @@ void GpuPtr_3D::download(float* cpu_ptr, unsigned int nx, unsigned int ny, unsig
 	printf("Error %s\n", cudaGetErrorString(cudaGetLastError()));
 
 }
-
-
 
 GpuPtr_2D::GpuPtr_2D(unsigned int width, unsigned int height, int border, float* cpu_ptr) {
 	data_width = width + 2*border;

@@ -10,6 +10,8 @@ using namespace std;
 
 float maximum(int n, float* array);
 void printArray(int n, float* array);
-void readHeightAndTopSurfaceFromMATLABFile(const char* filename, float* heights, float* topSurface, int& nx, int& ny);
+double getWallTime();
+void readHeightAndTopSurfaceFromMATLABFile(const char* filename, CpuPtr_2D& H, CpuPtr_2D& topSurface, int& nx, int& ny);
+
 
 #endif

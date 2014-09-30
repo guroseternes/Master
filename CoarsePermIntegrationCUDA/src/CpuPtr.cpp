@@ -63,7 +63,7 @@ void CpuPtr_3D::setTime(float t){
 
 
 CpuPtr_2D::CpuPtr_2D()
-: nx(1), ny(1), border(0), NX(nx+2*border), NY(ny+2*border), xmin(0), ymin(0), xmax(1.0), ymax(1.0),time(0){
+: nx(0), ny(0), border(0), NX(nx+2*border), NY(ny+2*border), xmin(0), ymin(0), xmax(1.0), ymax(1.0),time(0){
 	allocateMemory();
 		for (int j = 0; j < NY; j++){
 			for (int i = 0; i < NX; i++){

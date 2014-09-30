@@ -12,7 +12,7 @@
 
 void initAllocate(CoarsePermIntegrationKernelArgs* args1, CoarseMobIntegrationKernelArgs* args2);
 
-void callCoarsePermIntegrationKernel(dim3 grid, dim3 block, CoarseMobIntegrationKernelArgs* args);
+void callCoarseMobIntegrationKernel(dim3 grid, dim3 block, CoarseMobIntegrationKernelArgs* args);
 
 void callCoarsePermIntegrationKernel(dim3 grid, dim3 block, CoarsePermIntegrationKernelArgs* args);
 

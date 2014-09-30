@@ -35,7 +35,7 @@ public:
 	// Saturation - Permeability tables
 	float resolution;
 	float* p_cap_ref_table;
-	float* s_b_ref_table;
+	float* s_c_ref_table;
 	float size_tables;
 
 	float* H;

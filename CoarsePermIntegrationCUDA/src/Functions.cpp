@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>     /* srand, rand */
 #include <time.h>
+#include <sys/time.h>
+#include "CpuPtr.h"
 
 float maximum(int n, float* array){
 	float max = 0;
@@ -22,7 +24,17 @@ void printArray(int n, float* array){
 	}
 }
 
-void readHeightAndTopSurfaceFromMATLABFile(const char* filename, float* heights, float* topSurface, int& nx, int& ny){
+double getWallTime(){
+    struct timeval time;
+    if (gettimeofday(&time,NULL)){
+        //  Handle error
+        return 0;
+    }
+    return (double)time.tv_sec + (double)time.tv_usec * .000001;
+}
+
+
+void readHeightAndTopSurfaceFromMATLABFile(const char* filename, CpuPtr_2D& H, CpuPtr_2D& top_surface, int& nx, int& ny){
 
 mat_t *matfp;
 matvar_t *matvar;
@@ -37,23 +49,20 @@ Mat_VarReadDataAll(matfp, matvar);
 nx = matvar->dims[0];
 ny = matvar->dims[1];
 int size = nx*ny;
-heights = new float[size];
-memcpy(heights, matvar->data,sizeof(float)*size);
-//Mat_VarFree(matvar);
-//matvar = NULL;
-printf("%.4f", heights[7]);
+H = CpuPtr_2D(nx, ny, 0, true);
+memcpy(H.getPtr(), matvar->data,sizeof(float)*size);
+Mat_VarFree(matvar);
+matvar = NULL;
+printf("%.4f", H(42,0));
 
-topSurface = new float[3];
-
-/*
 matvar = Mat_VarReadNextInfo(matfp);
 printf("Variable: %s\n",matvar->name);
 printf("Halla");
 Mat_VarReadDataAll(matfp, matvar);
-topSurface = new float[size];
-memcpy(topSurface, matvar->data,sizeof(float)*size);
+top_surface = CpuPtr_2D(nx, ny, 0, true);
+memcpy(top_surface.getPtr(), matvar->data,sizeof(float)*size);
 Mat_VarFree(matvar);
 matvar = NULL;
-//printf("lazla\n%.4f", ts[9]);
-*/
+printf("%.4f\n", top_surface(42,0));
 }
+
