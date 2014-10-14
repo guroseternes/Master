@@ -18,6 +18,12 @@ public:
 	size_t pitch; //!< Pitch in bytes of allocated m
 };
 
+class GpuRawPtrInt {
+public:
+	int* ptr;   //!< pointer to allocated memory
+	size_t pitch; //!< Pitch in bytes of allocated m
+};
+
 class GpuRawPtr_3D {
 public:
 	cudaPitchedPtr data;   //!< pointer to allocated memory
@@ -125,6 +131,19 @@ public:
 
 private:
 	GpuRawPtr data;
+	unsigned int data_width;
+};
+
+class GpuPtrInt_1D{
+public:
+	GpuPtrInt_1D(unsigned int width, int* cpu_ptr=NULL);
+	~GpuPtrInt_1D();
+	void upload(const int* cpu_ptr, unsigned int x_offset=0, unsigned int width=0);
+	GpuRawPtrInt getRawPtr() const {
+		return data;
+	}
+private:
+	GpuRawPtrInt data;
 	unsigned int data_width;
 };
 

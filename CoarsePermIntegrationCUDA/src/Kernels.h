@@ -4,17 +4,30 @@
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 #include "KernelArgStructs.h"
+#include "DeviceFunctions.h"
 #include "vector_types.h"
 #include "Functions.h"
 #include "Util.h"
 #include <iostream>
 #include <stdio.h>
 
-void initAllocate(CoarsePermIntegrationKernelArgs* args1, CoarseMobIntegrationKernelArgs* args2);
+const int BLOCKDIM_X = 16;
+const int TILEDIM_X = BLOCKDIM_X-1;
+const int BLOCKDIM_Y = 16;
+const int SM_BLOCKDIM_Y = BLOCKDIM_Y;
+const int TILEDIM_Y = BLOCKDIM_Y-1;
 
-void callCoarseMobIntegrationKernel(dim3 grid, dim3 block, CoarseMobIntegrationKernelArgs* args);
+void setupGPU(CommonArgs* args);
+
+void callCoarseMobIntegrationKernel(dim3 grid, dim3 block, int gridDimX, CoarseMobIntegrationKernelArgs* args);
 
 void callCoarsePermIntegrationKernel(dim3 grid, dim3 block, CoarsePermIntegrationKernelArgs* args);
+
+void initAllocate(CommonArgs* args1, CoarsePermIntegrationKernelArgs* args2,
+				  CoarseMobIntegrationKernelArgs* args3, FluxKernelArgs* args4,
+				  TimeIntegrationKernelArgs* args5);
+
+void callTimeIntegration(dim3 grid, dim3 block, TimeIntegrationKernelArgs* args);
 
 
 #endif /* KERNELS_H_ */

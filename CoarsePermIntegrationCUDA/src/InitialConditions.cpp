@@ -49,6 +49,6 @@ void InitialConditions::createReferenceTable(){
 	for (int i = 0; i < n; i++){
 		// Insert equation for analytic capillary pressure curve
 		p_cap_ref_table[n-i-1] = delta_rho*g*max_height*c_cap*pow(1-resolution*i,-0.5f);
-		s_c_ref_table[n-i-1] = resolution*i;
+		s_c_ref_table[n-i-1] = 1;//resolution*i;
 	}
 }

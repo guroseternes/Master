@@ -197,3 +197,22 @@ void GpuPtr_1D::set(float value, unsigned int x_offset, unsigned int width) {
 	cudaMemcpy(ptr, &tmp[0], width*sizeof(float), cudaMemcpyHostToDevice);
 }
 
+GpuPtrInt_1D::GpuPtrInt_1D(unsigned int width, int* cpu_ptr) {
+	data_width = width;
+	data.ptr = 0;
+	cudaMalloc((void**) &data.ptr, data_width*sizeof(int));
+	if (cpu_ptr != NULL) upload(cpu_ptr);
+}
+
+GpuPtrInt_1D::~GpuPtrInt_1D() {
+	cudaFree(data.ptr);
+}
+
+void GpuPtrInt_1D::upload(const int* cpu_ptr, unsigned int x_offset, unsigned int width) {
+	width = (width == 0) ? data_width : width;
+
+	int* ptr1 = data.ptr + x_offset;
+	const int* ptr2 = cpu_ptr;
+
+	cudaMemcpy(ptr1, ptr2, width*sizeof(int), cudaMemcpyHostToDevice);
+}

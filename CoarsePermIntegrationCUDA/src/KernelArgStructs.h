@@ -3,29 +3,48 @@
 
 #include "GpuPtr.h"
 
-struct CoarsePermIntegrationKernelArgs {
-	GpuRawPtr K;
-	GpuRawPtr height_distribution;
-	GpuRawPtr nIntervals_dist;
-	cudaPitchedPtr perm_distribution;
-	float dz;
+struct CommonArgs {
+	GpuRawPtr H;
+	GpuRawPtr p_cap_ref_table;
+	GpuRawPtr s_c_ref_table;
+	float g, delta_rho;
 	unsigned int nx, ny, nz;
 	unsigned int border;
 };
 
+struct CoarsePermIntegrationKernelArgs {
+	GpuRawPtr K;
+	GpuRawPtr nIntervals_dist;
+	cudaPitchedPtr perm_distribution;
+	float dz;
+};
+
 struct CoarseMobIntegrationKernelArgs {
 	GpuRawPtr Lambda;
-	GpuRawPtr H_distribution;
-	GpuRawPtr h_distribution;
+	GpuRawPtr h;
 	GpuRawPtr K;
 	GpuRawPtr nIntervals;
 	cudaPitchedPtr perm_distribution;
-	GpuRawPtr p_cap_ref_table;
-	GpuRawPtr s_c_ref_table;
+	GpuRawPtrInt active_block_indexes;
 	float dz;
-	float g, p_ci, delta_rho;
-	unsigned int nx, ny;
-	unsigned int border;
+	float p_ci;
+};
+
+struct FluxKernelArgs  {
+	GpuRawPtr Lambda_c;
+	GpuRawPtr Lambda_b;
+	GpuRawPtr U_x;
+	GpuRawPtr U_y;
+	GpuRawPtr h;
+	GpuRawPtr z;
+};
+
+struct TimeIntegrationKernelArgs {
+	GpuRawPtr R;
+	GpuRawPtr S_c;
+	float p_ci;
+	float dz;
+	float* dt;
 };
 
 #endif /* KARGS_H_ */

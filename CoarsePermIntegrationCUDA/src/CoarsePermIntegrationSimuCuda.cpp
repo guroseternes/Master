@@ -10,130 +10,142 @@
 #include "matio.h"
 #include <memory.h>
 
-// Max number of intervals
-const int N = 100;
-
 int main() {
 
-	char* filename = "testtest.mat";
-
+	char* filename = "johansendata.mat";
+	char* filename2 = "perm.mat";
 	CpuPtr_2D H(0,0,0,true);
 	CpuPtr_2D top_surface(0,0,0,true);
-	int nx;
-	int ny;
-	int nz = 300;
-	readHeightAndTopSurfaceFromMATLABFile(filename, H, top_surface, nx, ny);
+	CpuPtr_2D h(0,0,0,true);
+	CpuPtr_2D normal_z(0,0,0,true);
+	CpuPtr_3D perm3Dfake(0, 0, 0, 0 , true);
+	CpuPtr_3D perm3D(0, 0, 0, 0 , true);
+	CpuPtr_3D poro3D(81, 100, 6, 0 , true);
+	//printf("poro3d(45, 50, 12) : %.3f", poro3D(10,10,10));
+	CpuPtr_2D pv(0,0,0,true);
+	CpuPtr_2D north_flux(0,0,0,true);
+	CpuPtr_2D east_flux(0,0,0,true);
+	CpuPtr_2D north_grav(0,0,0,true);
+	CpuPtr_2D east_grav(0,0,0,true);
+	int nx, ny, nz, border;
+	float dz;
+	border = 1;
+	readFormationDataFromMATLABFile(filename, H, top_surface, h,
+									normal_z, perm3Dfake, poro3D.getPtr(), pv,
+									north_flux, east_flux,
+									north_grav, east_grav,
+									dz, nz, nx, ny);
+	//Test reading
+	//readPermFromMATLABFile(filename2, perm3D);
+	printf("dz: %.3f nz: %i\n", dz, nz);
+	printf("H(25,25) %.3f east_grav(50,50): %.3f\n", H(25,25), east_grav(50,50));
+	printf("poro3d(45, 50, 1) : %.15f", poro3D(45,50,1));
 
-	printf("%.4f\n", H(42,0));
-	printf("%.4f\n", top_surface(42,0));
+	// Files with results
+	FILE* Lambda_integration_file;
+	Lambda_integration_file = fopen("Lambda_integration_sparse.txt", "w");
+	FILE* height_file;
+	height_file = fopen("heights.txt", "w");
+	FILE* Check_results_file;
+	Check_results_file = fopen("Check_results.txt", "w");
 
-	float max_height = maximum(1032, H.getPtr());
 
-// Files with results
-FILE* Lambda_integration_file;
-Lambda_integration_file = fopen("Lambda_integration.txt", "w");
-FILE* height_file;
-height_file = fopen("heights.txt", "w");
-FILE* Check_results_file;
-Check_results_file = fopen("Check_results.txt", "w");
+	// Cpu Pointer to store the results
+	CpuPtr_2D CheckResults(nx, ny, 0, true);
+	CpuPtr_2D zeros(nx, ny, 0, true);
+	CpuPtr_2D Lambda(nx, ny, 0, true);
 
-// Cpu Pointer to store the results
-CpuPtr_2D CheckResults(nx, ny, 0, true);
-CpuPtr_2D zeros(nx, ny, 0, true);
-CpuPtr_2D Lambda(nx, ny, 0, true);
+	// Initial Conditions
+	InitialConditions IC(nx, ny, 5);
+	IC.createReferenceTable();
+	IC.dz = dz;
 
-// Initial Conditions
-InitialConditions IC(nx, ny, max_height);
-//IC.H = H;
-IC.createReferenceTable();
+	// GPU
+	// Block sizes
+	int block_x = 16;
+	int block_y = 16;
+	// Set block and grid sizes and initialize gpu pointer
+	dim3 grid;
+	dim3 block;
+	computeGridBlock(grid, block, nx, ny, block_x, block_y);
 
-// GPU
-// Block sizes
-int block_x = 16;
-int block_y = 16;
-// Set block and grid sizes and initialize gpu pointer
-dim3 grid;
-dim3 block;
-computeGridBlock(grid, block, nx, ny, block_x, block_y);
+	// Create mask for sparse grid on GPU
+	std::vector<int> active_block_indexes;
+	int n_active_blocks = 0;
+	createGridMask(H, grid, block, nx, ny, active_block_indexes, n_active_blocks);
+	printf("nBlocks: %i nActiveBlocks: %i fraction: %.5f\n", grid.x*grid.y, n_active_blocks, (float)n_active_blocks/(grid.x*grid.y));
+	printf("dz: %.3f\n", IC.dz);
+	dim3 new_sparse_grid(n_active_blocks, 1, 1);
 
-CpuPtr_2D nInterval_dist(nx, ny, 0, true);
-CpuPtr_2D h_dist(nx, ny, 0, true);
-for (int j = 0; j < ny; j++){
-	for (int i = 0; i < nx; i++){
-		nInterval_dist(i,j) = ceil(H(i,j)/IC.dz);
-		h_dist(i,j) = H(i,j)-(H(i,j)*0.2);
-	}
-}
-
-// Create a 3D array with permeability data
-CpuPtr_3D permeability_dist(nx, ny, nz, 0 , true);
-// Fill array with fake data
-int H_current_col = 0;
-for (int j = 0; j < ny; j++){
-	for (int i = 0; i < nx; i++){
-		for (int k = 0; k < nInterval_dist(i,j); k++){
-			permeability_dist(i,j,k) = 1; //IC.k_data[]
+	CpuPtr_2D n_interval_dist(nx, ny, 0, true);
+	for (int j = 0; j < ny; j++){
+		for (int i = 0; i < nx; i++){
+			n_interval_dist(i,j) = ceil(H(i,j)/IC.dz);
 		}
 	}
-}
 
+	CommonArgs common_args;
+	CoarseMobIntegrationKernelArgs coarse_mob_int_args;
+	CoarsePermIntegrationKernelArgs coarse_perm_int_args;
+	FluxKernelArgs flux_kernel_args;
+	TimeIntegrationKernelArgs time_int_kernel_args;
+	initAllocate(&common_args, &coarse_perm_int_args, &coarse_mob_int_args, &flux_kernel_args, &time_int_kernel_args);
 
+	// Allocate and set data on the GPU
+	GpuPtr_3D perm3D_device(nx, ny, nz, 0, perm3D.getPtr());
+	GpuPtr_2D Lambda_c_device(nx, ny, 0, zeros.getPtr());
+	GpuPtr_2D Lambda_b_device(nx, ny, 0, zeros.getPtr());
+	GpuPtr_2D K_device(nx, ny, 0, zeros.getPtr());
+	GpuPtr_2D H_device(nx, ny, 0, H.getPtr());
+	GpuPtr_2D h_device(nx, ny, 0, h.getPtr());
+	GpuPtr_2D top_surface_device(nx, ny, 0, top_surface.getPtr());
+	GpuPtr_2D nInterval_dist_device(nx, ny, 0, n_interval_dist.getPtr());
+	GpuPtr_2D U_x_device(nx, ny, border, east_flux.getPtr());
+	GpuPtr_2D U_y_device(nx, ny, border, north_flux.getPtr());
+	GpuPtr_1D p_cap_ref_table_device(IC.size_tables, IC.p_cap_ref_table);
+	GpuPtr_1D s_c_ref_table_device(IC.size_tables, IC.s_c_ref_table);
+	GpuPtrInt_1D active_block_indexes_device(n_active_blocks, &active_block_indexes[0]);
 
-// Allocate and set data on the GPU
-GpuPtr_3D perm_dist_device(nx, ny, nz, 0, permeability_dist.getPtr());
-GpuPtr_2D Lambda_device(nx, ny, 0, zeros.getPtr());
-GpuPtr_2D K_device(nx, ny, 0, zeros.getPtr());
-GpuPtr_2D H_distribution_device(nx, ny, 0, H.getPtr());
-GpuPtr_2D h_distribution_device(nx, ny, 0, h_dist.getPtr());
-GpuPtr_2D nInterval_dist_device(nx, ny, 0, nInterval_dist.getPtr());
-GpuPtr_1D k_data_device(10, IC.k_data);
-GpuPtr_1D k_heights_device(10, IC.k_heights);
-GpuPtr_1D p_cap_ref_table_device(IC.size_tables, IC.p_cap_ref_table);
-GpuPtr_1D s_c_ref_table_device(IC.size_tables, IC.s_c_ref_table);
+	setCommonArgs(&common_args, IC.delta_rho, IC.g,
+				  H_device.getRawPtr(), p_cap_ref_table_device.getRawPtr(),
+				  s_c_ref_table_device.getRawPtr(), nx, ny, border);
+	setupGPU(&common_args);
+	// Set arguments and run coarse permeability integration kernel
+	setCoarsePermIntegrationKernelArgs(&coarse_perm_int_args,
+									   K_device.getRawPtr(),
+									   perm3D_device.getRawPtr(),
+									   nInterval_dist_device.getRawPtr(),
+									   IC.dz);
+	callCoarsePermIntegrationKernel(grid, block, &coarse_perm_int_args);
 
-// Set arguemnts and run coarse permeability integration kernel
-CoarsePermIntegrationKernelArgs coarse_perm_int_args;
-setCoarsePermIntegrationKernelArgs(&coarse_perm_int_args,
-								   K_device.getRawPtr(),
-								   H_distribution_device.getRawPtr(),
-								   perm_dist_device.getRawPtr(),
-								   nInterval_dist_device.getRawPtr(),
-								   IC.dz, nx, ny, nz, 0);
+	// Set arguments and run coarse mobilty integration kernel
+	setCoarseMobIntegrationKernelArgs(&coarse_mob_int_args,
+								Lambda_c_device.getRawPtr(),
+								h_device.getRawPtr(),
+								perm3D_device.getRawPtr(),
+								K_device.getRawPtr(),
+								nInterval_dist_device.getRawPtr(),
+								active_block_indexes_device.getRawPtr(),
+								IC.p_ci, IC.dz);
 
-// Set arguments and run coarse mobilty integration kernel
-CoarseMobIntegrationKernelArgs coarse_mob_int_args;
-setCoarseMobIntegrationArgs(&coarse_mob_int_args,
-							Lambda_device.getRawPtr(),
-							H_distribution_device.getRawPtr(),
-							h_distribution_device.getRawPtr(),
-							perm_dist_device.getRawPtr(),
-							K_device.getRawPtr(),
-							nInterval_dist_device.getRawPtr(),
-							p_cap_ref_table_device.getRawPtr(),
-							s_c_ref_table_device.getRawPtr(),
-							IC.p_ci, IC.g, IC.delta_rho,
-							IC.dz, nx, ny, 0);
+	setFluxKernelArgs(&flux_kernel_args,
+					  Lambda_c_device.getRawPtr(), Lambda_b_device.getRawPtr(),
+					  U_x_device.getRawPtr(), U_y_device.getRawPtr(),
+					  h_device.getRawPtr(),top_surface_device.getRawPtr());
 
+	// Run function with timer
+	double time_start = getWallTime();
+	//callCoarseMobIntegrationKernel(new_sparse_grid, block, grid.x, &coarse_mob_int_args);
+	printf("Elapsed time %.5f", getWallTime()-time_start);
 
+	printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 
-printf("%s\n", cudaGetErrorString(cudaGetLastError()));
-
-callCoarsePermIntegrationKernel(grid, block, &coarse_perm_int_args);
-
-
-double time_start = getWallTime();
-for (int i = 0; i < 2; i++){
-	callCoarseMobIntegrationKernel(grid, block, &coarse_mob_int_args);
-}
-printf("Elapsed time %.5f", getWallTime()-time_start);
-printf("%s\n", cudaGetErrorString(cudaGetLastError()));
-
-// Print to file
-Lambda_device.download(CheckResults.getPtr(), 0, 0, nx, ny);
-printf("%s\n", cudaGetErrorString(cudaGetLastError()));
-CheckResults.printToFile(Lambda_integration_file);
-H.printToFile(height_file);
-printf("Check results %.3f", CheckResults(43,0));
-
+	// Print to file
+	/*Lambda_c_device.download(CheckResults.getPtr(), 0, 0, nx, ny);
+	printf("Load error: %s\n", cudaGetErrorString(cudaGetLastError()));
+	CheckResults.printToFile(Lambda_integration_file);
+	H.printToFile(height_file);
+	printf("Check results %.3f", CheckResults(6,0));
+*/
 }
 

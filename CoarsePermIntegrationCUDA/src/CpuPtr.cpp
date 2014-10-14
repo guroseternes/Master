@@ -25,7 +25,7 @@ CpuPtr_3D::~CpuPtr_3D(){
 }
 
 float &CpuPtr_3D::operator() (unsigned int i, unsigned int j, unsigned int k){
-	return data[(i+border)*(ny+2*border)*(nz) + nz*(j+border) + k];
+	return data[(k+border)*(ny+2*border)*(nx) + nx*(j+border) + i];
 }
 
 void CpuPtr_3D::allocateMemory(){
