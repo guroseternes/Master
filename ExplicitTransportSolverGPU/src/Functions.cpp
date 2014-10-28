@@ -14,8 +14,9 @@ void print_properties(){
         cudaDeviceProp p;
         cudaSetDevice(0);
         cudaGetDeviceProperties (&p, 0);
-        printf("Compute capability: %d.%d\n", p.major, p.minor);
+
         printf("Name: %s\n" , p.name);
+        printf("Compute capability: %d.%d\n", p.major, p.minor);
         printf("Compute concurrency %i\n", p.concurrentKernels);
         printf("\n\n");
 }
@@ -48,6 +49,26 @@ double getWallTime(){
     return (double)time.tv_sec + (double)time.tv_usec * .000001;
 }
 
+void readActiveCellsFromMATLABFile(const char* filename, float* active_cells) {
+
+mat_t *matfp;
+matvar_t *matvar;
+matfp = Mat_Open(filename, MAT_ACC_RDONLY);
+if ( NULL == matfp ) {
+	fprintf(stderr,"Error opening MAT file");
+}
+int nx, ny, nz;
+
+matvar = Mat_VarReadNextInfo(matfp);
+Mat_VarReadDataAll(matfp, matvar);
+nx = matvar->dims[0];
+ny = matvar->dims[1];
+int size = nx*ny;
+memcpy(active_cells, matvar->data,sizeof(float)*size);
+Mat_VarFree(matvar);
+matvar = NULL;
+}
+
 void readFormationDataFromMATLABFile(const char* filename, float* H, float* top_surface, float* h,
 									float* z_normal, float* perm3D, float* poro3D, float* pv,
 									float* north_flux, float* east_flux,
@@ -64,7 +85,6 @@ int nx, ny, nz;
 
 matvar = Mat_VarReadNextInfo(matfp);
 Mat_VarReadDataAll(matfp, matvar);
-printf("Variable: %s\n",matvar->name);
 nx = matvar->dims[0];
 ny = matvar->dims[1];
 int size = nx*ny;
@@ -74,70 +94,63 @@ matvar = NULL;
 
 matvar = Mat_VarReadNextInfo(matfp);
 Mat_VarReadDataAll(matfp, matvar);
-printf("Variable: %s\n",matvar->name);
 memcpy(h, matvar->data,sizeof(float)*size);
 Mat_VarFree(matvar);
 matvar = NULL;
 
 matvar = Mat_VarReadNextInfo(matfp);
 Mat_VarReadDataAll(matfp, matvar);
-printf("Variable: %s\n",matvar->name);
 memcpy(top_surface, matvar->data,sizeof(float)*size);
 Mat_VarFree(matvar);
 matvar = NULL;
 
 matvar = Mat_VarReadNextInfo(matfp);
 Mat_VarReadDataAll(matfp, matvar);
-printf("Variable: %s\n",matvar->name);
 memcpy(pv, matvar->data,sizeof(float)*size);
 Mat_VarFree(matvar);
 matvar = NULL;
 
 matvar = Mat_VarReadNextInfo(matfp);
 Mat_VarReadDataAll(matfp, matvar);
-printf("Variable: %s\n",matvar->name);
-memcpy(east_flux, matvar->data,sizeof(float)*(nx+1)*(ny+1));
+int nx_flux = matvar->dims[0];
+int ny_flux = matvar->dims[1];
+//printf("Variable %s nx: %i ny %i")
+memcpy(east_flux, matvar->data,sizeof(float)*(nx+2)*(ny+2));
 Mat_VarFree(matvar);
 matvar = NULL;
 
 matvar = Mat_VarReadNextInfo(matfp);
 Mat_VarReadDataAll(matfp, matvar);
-printf("Variable: %s\n",matvar->name);
-memcpy(north_flux, matvar->data,sizeof(float)*(nx+1)*(ny+1));
+memcpy(north_flux, matvar->data,sizeof(float)*(nx+2)*(ny+2));
 Mat_VarFree(matvar);
 matvar = NULL;
 
 matvar = Mat_VarReadNextInfo(matfp);
 Mat_VarReadDataAll(matfp, matvar);
-printf("Variable: %s\n",matvar->name);
 memcpy(east_grav, matvar->data,sizeof(float)*size);
 Mat_VarFree(matvar);
 matvar = NULL;
 
 matvar = Mat_VarReadNextInfo(matfp);
 Mat_VarReadDataAll(matfp, matvar);
-printf("Variable: %s\n",matvar->name);
 memcpy(north_grav, matvar->data,sizeof(float)*size);
 Mat_VarFree(matvar);
 matvar = NULL;
 
 matvar = Mat_VarReadNextInfo(matfp);
 Mat_VarReadDataAll(matfp, matvar);
-printf("Variable: %s\n",matvar->name);
 memcpy(north_K_face, matvar->data,sizeof(float)*size);
 Mat_VarFree(matvar);
 matvar = NULL;
 
 matvar = Mat_VarReadNextInfo(matfp);
 Mat_VarReadDataAll(matfp, matvar);
-printf("Variable: %s\n",matvar->name);
 memcpy(east_K_face, matvar->data,sizeof(float)*size);
 Mat_VarFree(matvar);
 matvar = NULL;
 
 matvar = Mat_VarReadNextInfo(matfp);
 Mat_VarReadDataAll(matfp, matvar);
-printf("Variable: %s\n",matvar->name);
 memcpy(z_normal, matvar->data,sizeof(float)*size);
 Mat_VarFree(matvar);
 matvar = NULL;
@@ -145,7 +158,6 @@ matvar = NULL;
 //perm3D = CpuPtr_3D(nx, ny, nz, 0, true);
 matvar = Mat_VarReadNextInfo(matfp);
 Mat_VarReadDataAll(matfp, matvar);
-printf("Variable: %s\n",matvar->name);
 nz = matvar->dims[0];
 ny = matvar->dims[1];
 nx = matvar->dims[2];
@@ -156,21 +168,17 @@ matvar = NULL;
 
 matvar = Mat_VarReadNextInfo(matfp);
 Mat_VarReadDataAll(matfp, matvar);
-printf("Variable: %s\n",matvar->name);
 memcpy(poro3D, matvar->data,sizeof(float)*nx*ny*nz);
 Mat_VarFree(matvar);
 matvar = NULL;
 
 matvar = Mat_VarReadNextInfo(matfp);
 Mat_VarReadDataAll(matfp, matvar);
-printf("Variable: %s\n",matvar->name);
 dz = *(float*)matvar->data;
 Mat_VarFree(matvar);
 matvar = NULL;
-
-
-
 }
+
 void readDimensionsFromMATLABFile(const char* filename, int& nx, int& ny, int& nz){
 
 mat_t *matfp;
@@ -182,21 +190,18 @@ if ( NULL == matfp ) {
 
 matvar = Mat_VarReadNextInfo(matfp);
 Mat_VarReadDataAll(matfp, matvar);
-printf("Variable: %s\n",matvar->name);
 nz = *(float*)matvar->data;
 Mat_VarFree(matvar);
 matvar = NULL;
 
 matvar = Mat_VarReadNextInfo(matfp);
 Mat_VarReadDataAll(matfp, matvar);
-printf("Variable: %s",matvar->name);
 nx = *(float*)matvar->data;
 Mat_VarFree(matvar);
 matvar = NULL;
 
 matvar = Mat_VarReadNextInfo(matfp);
 Mat_VarReadDataAll(matfp, matvar);
-printf("Variable: %s\n",matvar->name);
 ny = *(float*)matvar->data;
 Mat_VarFree(matvar);
 matvar = NULL;

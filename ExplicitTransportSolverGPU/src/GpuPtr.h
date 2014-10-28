@@ -91,12 +91,13 @@ public:
 			unsigned int width=0, unsigned int height=0, int border=0);
 
 	void download(float* cpu_ptr,
-			unsigned int x_offset=0, unsigned int y_offset=0,
-			unsigned int width=0, unsigned int height=0);
+			unsigned int x_offset, unsigned int y_offset,
+			unsigned int width, unsigned int height);
 
 	// Perform CPU to GPU copy of a witdh x height domain starting at x_offset and y_offset on the cpu_ptr.
 	void upload(const float* cpu_ptr, unsigned int x_offset=0, unsigned int y_offset=0,
     		unsigned int width=0, unsigned int height=0);
+
 
 	// Performs GPU "memset" of a width x height domain starting at x-offset, y_offset. Only really useful for setting all bits to 0 or 1.
 	void set(int value, unsigned int x_offset=0, unsigned int y_offset=0,
@@ -122,8 +123,8 @@ public:
 	void upload(const float* cpu_ptr, unsigned int x_offset=0, unsigned int width=0);
 	//void set(int value, unsigned int x_offset=0, unsigned int width=0);
 	void set(float value, unsigned int x_offset=0, unsigned int width=0);
-	GpuRawPtr getRawPtr() const {
-		return data;
+	float* getRawPtr() const {
+		return data.ptr;
 	}
 	const unsigned int& getWidth() const {
 		return data_width;

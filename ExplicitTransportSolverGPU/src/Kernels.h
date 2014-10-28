@@ -10,12 +10,14 @@
 #include "Util.h"
 #include <iostream>
 #include <stdio.h>
+#include "float.h"
 
 const int BLOCKDIM_X = 16;
-const int TILEDIM_X = BLOCKDIM_X-1;
+const int TILEDIM_X = BLOCKDIM_X-2;
 const int BLOCKDIM_Y = 16;
 const int SM_BLOCKDIM_Y = BLOCKDIM_Y;
-const int TILEDIM_Y = BLOCKDIM_Y-1;
+const int TILEDIM_Y = BLOCKDIM_Y-2;
+const int TIME_THREADS = 64;
 
 void setupGPU(CommonArgs* args);
 
@@ -25,9 +27,12 @@ void callCoarsePermIntegrationKernel(dim3 grid, dim3 block, CoarsePermIntegratio
 
 void initAllocate(CommonArgs* args1, CoarsePermIntegrationKernelArgs* args2,
 				  CoarseMobIntegrationKernelArgs* args3, FluxKernelArgs* args4,
-				  TimeIntegrationKernelArgs* args5);
+				  TimeIntegrationKernelArgs* args5, TimestepReductionKernelArgs* args6);
+
+void callFluxKernel(dim3 grid, dim3 block, FluxKernelArgs* args);
 
 void callTimeIntegration(dim3 grid, dim3 block, TimeIntegrationKernelArgs* args);
 
+void callTimestepReductionKernel(int nThreads, TimestepReductionKernelArgs* args);
 
 #endif /* KERNELS_H_ */

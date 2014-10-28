@@ -141,9 +141,19 @@ CpuPtr_2D &CpuPtr_2D::operator = (const CpuPtr_2D &rhs){
 }
 
 void CpuPtr_2D::printToFile(FILE* filePtr){
+	fprintf(filePtr, "nx: %i ny: %i\n", nx, ny);
 	for (int j=0; j<ny; j++){
 		for (int i=0; i<nx; i++){
-			fprintf(filePtr, "%i\t%i\t%.5f\n", i, j, this->operator()(i,j));
+			fprintf(filePtr, "%i\t%i\t%.15f\n", i, j, this->operator()(i,j));
+		}
+	}
+}
+
+void CpuPtr_2D::printToFileComparison(FILE* filePtr, CpuPtr_2D other){
+	fprintf(filePtr, "NX: %i NY: %i\n", nx, ny);
+	for (int j=0; j<ny; j++){
+		for (int i=0; i<nx; i++){
+			fprintf(filePtr, "%i\t%i\t%.19f\t%.19f\n", i, j, this->operator()(i,j), other(i,j));
 		}
 	}
 }

@@ -7,28 +7,33 @@
 #include <vector>
 #include <math.h>
 #include "CpuPtr.h"
-
-struct CoarsePermIC {
-
-};
+#include "Util.h"
 
 class InitialConditions{
 public:
 	InitialConditions(int nx, int ny, float max_height);
+	void createScalingParameterTable(CpuPtr_2D H);
+	void createInitialCoarseSatu(CpuPtr_2D H, CpuPtr_2D h);
 	void createReferenceTable();
 	//void computeRandomHeights();
 
 	unsigned int nx;
 	unsigned int ny;
 	float dz;
+	float integral_res;
 	float max_height;
 
 	float delta_rho;
 	float g;
 	float mu_c;
 	float mu_b;
+	float s_b_res;
+	float s_c_res;
+
 	float c_cap;
 	float p_ci;
+	float lambda_end_point_c;
+	float lambda_end_point_b;
 
 	// Permeability data
 	float* k_data;
@@ -40,10 +45,9 @@ public:
 	float* s_c_ref_table;
 	float size_tables;
 
-	float* H;
+	CpuPtr_2D initial_coarse_satu_c;
+	CpuPtr_2D scaling_parameter;
 
-private:
-	CoarsePermIC coarse_perm_IC;
 };
 
 #endif /* INITIALCONDITIONS_H_ */

@@ -75,6 +75,8 @@ public:
 
 	void printToFile(FILE* filePtr); //, bool withHeader = false, bool withBorder = false);
 
+	void printToFileComparison(FILE* filePtr, CpuPtr_2D other);
+
 	private:
 		unsigned int nx, ny, border, NX, NY;
 		float time;

@@ -19,5 +19,6 @@ void readFormationDataFromMATLABFile(const char* filename, float* H, float* top_
 		float* north_grav, float* east_grav,
 		float* north_K_face, float* east_K_face , float& dz);
 void readHeightAndTopSurfaceFromMATLABFile(const char* filename, CpuPtr_2D& H, CpuPtr_2D& topSurface, int& nx, int& ny);
+void readActiveCellsFromMATLABFile(const char* filename, float* active_cells);
 void readDimensionsFromMATLABFile(const char* filename, int& nx, int& ny, int& nz);
 #endif

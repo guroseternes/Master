@@ -86,7 +86,8 @@ GpuPtr_2D::GpuPtr_2D(unsigned int width, unsigned int height, int border, float*
 	data.pitch = 0;
 
 	cudaMallocPitch((void**) &data.ptr, &data.pitch, data_width*sizeof(float), data_height);
-	if (cpu_ptr != NULL) upload(cpu_ptr);
+	if (cpu_ptr != NULL)
+		upload(cpu_ptr);
 }
 
 GpuPtr_2D::~GpuPtr_2D() {
