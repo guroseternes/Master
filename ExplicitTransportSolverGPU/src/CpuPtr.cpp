@@ -158,6 +158,12 @@ void CpuPtr_2D::printToFileComparison(FILE* filePtr, CpuPtr_2D other){
 	}
 }
 
+void CpuPtr_2D::convertToDoublePointer(double* ptr){
+	for (int i = 0; i < NX*NY; i++){
+		ptr[i] = (double)data[i];
+	}
+}
+
 /*
 void CpuPtr_2D::printToFile(FILE* filePtr, bool withHeader, bool withBorder){
 

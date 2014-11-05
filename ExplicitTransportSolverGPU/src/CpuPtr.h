@@ -77,6 +77,8 @@ public:
 
 	void printToFileComparison(FILE* filePtr, CpuPtr_2D other);
 
+	void convertToDoublePointer(double* ptr);
+
 	private:
 		unsigned int nx, ny, border, NX, NY;
 		float time;

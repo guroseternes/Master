@@ -17,9 +17,11 @@ void createGridMask(CpuPtr_2D H, dim3 grid, dim3 block, int nx, int ny,
 				    std::vector<int> &activeBlockIndexes, int& nActiveBlocks);
 
 
+
 void setCommonArgs(CommonArgs* args, float p_ci, float delta_rho, float g, float mu_c, float mu_b,
 				   float s_c_res, float s_b_res, float l_e_p_c, float l_e_p_b,
-				   GpuRawPtr active_cells, GpuRawPtr H, GpuRawPtr pv,
+				   GpuRawPtr active_east, GpuRawPtr active_north,
+				   GpuRawPtr H, GpuRawPtr pv,
 			       unsigned int nx, unsigned int ny, unsigned int border);
 
 void setCoarsePermIntegrationKernelArgs(CoarsePermIntegrationKernelArgs* args, GpuRawPtr K,
@@ -36,6 +38,7 @@ void setCoarseMobIntegrationKernelArgs(CoarseMobIntegrationKernelArgs* args,
 								  float p_ci,
 								  float dz);
 
+
 void setFluxKernelArgs(FluxKernelArgs* args,
 					   GpuRawPtr Lambda_c, GpuRawPtr Lambda_b,
 					   GpuRawPtr dLambda_c, GpuRawPtr dLambda_b,
@@ -43,12 +46,13 @@ void setFluxKernelArgs(FluxKernelArgs* args,
 					   GpuRawPtr h, GpuRawPtr z, GpuRawPtr normal_z,
 					   GpuRawPtr K_face_east, GpuRawPtr K_face_north,
 					   GpuRawPtr g_vec_east, GpuRawPtr g_vec_north,
-					   GpuRawPtr R, float* dt_vector);
+					   GpuRawPtr R, float* dt_vector, GpuRawPtr test_output);
 
 
 void setTimeIntegrationKernelArgs(TimeIntegrationKernelArgs* args, float* global_dt, float dz,
 								  GpuRawPtr pv, GpuRawPtr h, GpuRawPtr F,
-								  GpuRawPtr S_c, GpuRawPtr scaling_para_C, GpuRawPtr zeros);
+								  GpuRawPtr S_c, GpuRawPtr scaling_para_C,
+								  GpuRawPtr vol_old, GpuRawPtr vol_new);
 
 void setTimestepReductionKernelArgs(TimestepReductionKernelArgs* args, int nThreads, int nElements,
 									float* global_dt, float cfl_scale, float* dt_vec);

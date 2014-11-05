@@ -5,7 +5,8 @@
 
 struct CommonArgs {
 	GpuRawPtr H;
-	GpuRawPtr active_cells;
+	GpuRawPtr active_east;
+	GpuRawPtr active_north;
 	GpuRawPtr pv;
 	float p_ci;
 	float g, delta_rho, mu_c, mu_b;
@@ -52,6 +53,7 @@ struct FluxKernelArgs  {
 	GpuRawPtr K_face_north;
 	GpuRawPtr g_vec_east;
 	GpuRawPtr g_vec_north;
+	GpuRawPtr test_output;
 
 	float* dt_vector;
 };
@@ -61,7 +63,8 @@ struct TimeIntegrationKernelArgs {
 	GpuRawPtr h;
 	GpuRawPtr R;
 	GpuRawPtr S_c;
-	GpuRawPtr zeros;
+	GpuRawPtr vol_old;
+	GpuRawPtr vol_new;
 	GpuRawPtr scaling_parameter_C;
 	float dz;
 	float* global_dt;

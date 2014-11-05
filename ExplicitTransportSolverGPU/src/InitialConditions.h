@@ -8,6 +8,7 @@
 #include <math.h>
 #include "CpuPtr.h"
 #include "Util.h"
+#include "Kernels.h"
 
 class InitialConditions{
 public:
@@ -15,13 +16,20 @@ public:
 	void createScalingParameterTable(CpuPtr_2D H);
 	void createInitialCoarseSatu(CpuPtr_2D H, CpuPtr_2D h);
 	void createReferenceTable();
+	void createnIntervalsTable(CpuPtr_2D H);
+	void computeAllGridBlocks();
+	void createDtVec();
 	//void computeRandomHeights();
 
 	unsigned int nx;
 	unsigned int ny;
+	unsigned int border;
 	float dz;
 	float integral_res;
 	float max_height;
+
+	float cfl_scale;
+	float dt_test;
 
 	float delta_rho;
 	float g;
@@ -45,8 +53,15 @@ public:
 	float* s_c_ref_table;
 	float size_tables;
 
+	CpuPtr_2D nIntervals;
 	CpuPtr_2D initial_coarse_satu_c;
 	CpuPtr_2D scaling_parameter;
+
+	//Block and grid
+	dim3 grid, block, block_flux, grid_flux;
+	int nElements;
+	float* dt_vector;
+
 
 };
 

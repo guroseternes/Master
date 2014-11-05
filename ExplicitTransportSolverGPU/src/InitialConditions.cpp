@@ -4,7 +4,12 @@ InitialConditions::InitialConditions(int nx, int ny, float dz){
 	this->nx = nx;
 	this->ny = ny;
 	this->dz = dz;
-	this->integral_res = 0.01f;
+	this->border = 1;
+
+	this->cfl_scale = 0.5*0.25;
+	this->dt_test = 4.3711 * pow((float)10, 7);
+
+	this->integral_res = 0.1f;
 	// Density difference between brine and CO2
 	this->delta_rho = 686.54-975.86;
 	// Gravitational acceleration
@@ -38,17 +43,27 @@ InitialConditions::InitialConditions(int nx, int ny, float dz){
 		this->k_heights[i] = heights[i];
 	}
 }
+void InitialConditions::computeAllGridBlocks(){
+	computeGridBlock(grid, block, nx, ny, BLOCKDIM_X, BLOCKDIM_Y);
+	computeGridBlock(grid_flux, block_flux, nx + 2*border, ny + 2*border, BLOCKDIM_X,
+			BLOCKDIM_Y, TILEDIM_X, TILEDIM_Y);
+}
 
-/*void InitialConditions::computeRandomHeights(){
-	 initialize random seed:
-	srand (time(NULL));
-	height_distribution = CpuPtr_2D(nx, ny, 0, true);
-	for (int j = 0; j < nx; j++){
-		for (int i = 0; i < ny; i++){
-			height_distribution(i,j) = 50 + j - i;
+void InitialConditions::createDtVec(){
+	dt_vector = new float[nElements];
+	for (int k = 0; k < nElements; k++){
+			dt_vector[k] = FLT_MAX;
+	}
+}
+
+void InitialConditions::createnIntervalsTable(CpuPtr_2D H){
+	nIntervals = CpuPtr_2D(nx,ny,0,true);
+	for (int j = 0; j < ny; j++){
+		for (int i = 0; i < nx; i++){
+			nIntervals(i, j) = ceil(H(i, j) / dz);
 		}
 	}
-}*/
+}
 
 void InitialConditions::createScalingParameterTable(CpuPtr_2D H){
 	scaling_parameter = CpuPtr_2D(nx,ny,0,true);
@@ -61,7 +76,7 @@ void InitialConditions::createScalingParameterTable(CpuPtr_2D H){
 
 void InitialConditions::createInitialCoarseSatu(CpuPtr_2D H, CpuPtr_2D h){
 	initial_coarse_satu_c = CpuPtr_2D(nx, ny, 0, true);
-	float res = integral_res/100;
+	float res = integral_res/10;
 	for (int j = 0; j < ny; j++){
 			for (int i = 0; i < nx; i++){
 				initial_coarse_satu_c(i,j) = computeCoarseSaturation(p_ci, g, delta_rho, s_b_res, h(i,j), res, ceil(h(i,j)/res),

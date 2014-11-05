@@ -60,16 +60,17 @@ inline __device__ float computeFluxEast(float (&U)[BLOCKDIM_X][SM_BLOCKDIM_Y],
 									   float (&h)[BLOCKDIM_X][SM_BLOCKDIM_Y],
 									   float (&z)[BLOCKDIM_X][SM_BLOCKDIM_Y],
 									   float(&normal_z)[BLOCKDIM_X][SM_BLOCKDIM_Y],
-									   float K_face, float g_vec, float pv,
+									   float K_face, float g_vec, float pv, float H,
 									   unsigned int i, unsigned int j){
 	float face_mob_c, face_mob_b, dface_mob_c, dface_mob_b, tot_mob, F_c;
 	float U_b, U_c;
 	float h_diff, z_diff, b, g_flux;
 	float delta_rho = common_ctx.delta_rho;
 	float ff = 0;
+	h_diff = h[i][j]*normal_z[i][j]-h[i+1][j]*normal_z[i+1][j];
 	z_diff = z[i][j]-z[i+1][j];
 	b = z_diff + h_diff;
-	g_flux = -g_vec*b*delta_rho*K_face;
+	g_flux = -g_vec*b*delta_rho*K_face*H;
 
 	// Determine the upwind cell evaluation for the two phases
 	if (g_flux*U[i][j] >= 0) {
@@ -112,14 +113,14 @@ inline __device__ float computeFluxEast(float (&U)[BLOCKDIM_X][SM_BLOCKDIM_Y],
 		U_c = F_c*(U[i][j]+face_mob_b*g_flux);
 		U_b = (1-F_c)*(U[i][j]-face_mob_c*g_flux);
 		ff = face_mob_b*dface_mob_c*abs(U_c)/(tot_mob*face_mob_c)+
-			 face_mob_c*dface_mob_b*abs(U_b)/(tot_mob*face_mob_b)+
-		     -(g_vec*delta_rho*K_face*face_mob_b*F_c);
+			 face_mob_c*dface_mob_b*abs(U_b)/(tot_mob*face_mob_b)-
+		     (g_vec*delta_rho*K_face*face_mob_b*F_c*H);
 	}
 	float dt_temp = FLT_MAX;
-	if (ff > 1*pow(10.0, -10) && pv != 0)
+	if (ff > 1*pow(10.0, -15) && pv != 0)
 		dt_temp = pv/ff;
 	// Reuse of memory
-	U[i][j] = U_c;
+	U[i][j] =  U_c;
 	return dt_temp;
 }
 
@@ -131,19 +132,17 @@ inline __device__ float computeFluxNorth(float (&U)[BLOCKDIM_X][SM_BLOCKDIM_Y],
 									   float (&h)[BLOCKDIM_X][SM_BLOCKDIM_Y],
 									   float (&z)[BLOCKDIM_X][SM_BLOCKDIM_Y],
 									   float (&normal_z)[BLOCKDIM_X][SM_BLOCKDIM_Y],
-									   float K_face, float g_vec, float pv,
+									   float K_face, float g_vec, float pv, float H,
 									   unsigned int i, unsigned int j){
 	float face_mob_c, face_mob_b, dface_mob_c, dface_mob_b, tot_mob, F_c;
 	float U_b, U_c;
 	float h_diff, z_diff, b, g_flux;
 	float delta_rho = common_ctx.delta_rho;
-	float ff = 3;
-
-	// Prepare som values for flux computation
+	float ff = 0;
 	h_diff = h[i][j]*normal_z[i][j]-h[i][j+1]*normal_z[i][j+1];
 	z_diff = z[i][j]-z[i][j+1];
 	b = z_diff + h_diff;
-	g_flux = -g_vec*b*delta_rho*K_face;
+	g_flux = -g_vec*b*delta_rho*K_face*H;
 
 	// Determine the upwind cell evaluation for the two phases
 	if (g_flux*U[i][j] >= 0) {
@@ -185,11 +184,11 @@ inline __device__ float computeFluxNorth(float (&U)[BLOCKDIM_X][SM_BLOCKDIM_Y],
 		U_c = F_c*(U[i][j]+face_mob_b*g_flux);
 		U_b = (1-F_c)*(U[i][j]-face_mob_c*g_flux);
 		ff = face_mob_b*dface_mob_c*abs(U_c)/(tot_mob*face_mob_c)+
-			 face_mob_c*dface_mob_b*abs(U_b)/(tot_mob*face_mob_b)+
-		     -(g_vec*delta_rho*K_face*face_mob_b*F_c);
+			 face_mob_c*dface_mob_b*abs(U_b)/(tot_mob*face_mob_b)-
+		     (g_vec*delta_rho*K_face*face_mob_b*F_c*H);
 	}
 	float dt_temp = FLT_MAX;
-	if (ff > 1*pow(10.0, -10) && pv != 0)
+	if (ff > 1*pow(10.0, -15) && pv != 0)
 		dt_temp = pv/ff;
 	// Reuse of memory
 	U[i][j] = U_c;
@@ -206,16 +205,21 @@ __global__ void FluxKernel(){
 	int xid = blockIdx.x*TILEDIM_X + threadIdx.x-border;
     int yid = blockIdx.y*TILEDIM_Y + threadIdx.y-border;
 
-    // Dette må endres til å ta med ytterste celle
-    xid = fminf(xid, common_ctx.nx-1);
-    yid = fminf(yid, common_ctx.ny-1);
-    xid = fmaxf(xid, 0);
-    yid = fmaxf(yid,0);
+    xid = fminf(xid, common_ctx.nx);
+    yid = fminf(yid, common_ctx.ny);
+    int new_xid = fminf(xid, common_ctx.nx-1);
+    int new_yid = fminf(yid, common_ctx.ny-1);
+    new_xid = fmaxf(new_xid, 0);
+    new_yid = fmaxf(new_yid, 0);
+
     // Local id
     int i = threadIdx.x;
     int j = threadIdx.y;
 
-    int active = global_index(common_ctx.active_cells.ptr, common_ctx.active_cells.pitch, xid, yid, border)[0];
+    int active_north = global_index(common_ctx.active_north.ptr, common_ctx.active_north.pitch,
+    		                        new_xid, new_yid, noborder)[0];
+    int active_east = global_index(common_ctx.active_east.ptr, common_ctx.active_east.pitch,
+    		                        new_xid, new_yid, noborder)[0];
 
     __shared__ float U_local_x[BLOCKDIM_X][SM_BLOCKDIM_Y];
     __shared__ float U_local_y[BLOCKDIM_X][SM_BLOCKDIM_Y];
@@ -236,34 +240,49 @@ __global__ void FluxKernel(){
 
     U_local_x[i][j] = global_index(fk_ctx.U_x.ptr, fk_ctx.U_x.pitch, xid, yid, border)[0];
     U_local_y[i][j] = global_index(fk_ctx.U_y.ptr, fk_ctx.U_y.pitch, xid, yid, border)[0];
-    lambda_c_local[i][j] = global_index(fk_ctx.Lambda_c.ptr, fk_ctx.Lambda_c.pitch, xid, yid, noborder)[0];
-    lambda_b_local[i][j] = global_index(fk_ctx.Lambda_b.ptr, fk_ctx.Lambda_b.pitch, xid, yid, noborder)[0];
-    dlambda_c_local[i][j] = global_index(fk_ctx.dLambda_c.ptr, fk_ctx.Lambda_c.pitch, xid, yid, noborder)[0];
-    dlambda_b_local[i][j] = global_index(fk_ctx.dLambda_b.ptr, fk_ctx.Lambda_b.pitch, xid, yid, noborder)[0];
-    h_local[i][j] = global_index(fk_ctx.h.ptr, fk_ctx.h.pitch, xid, yid, noborder)[0];
-    z_local[i][j] = global_index(fk_ctx.z.ptr, fk_ctx.z.pitch, xid, yid, noborder)[0];
-    normal_z_local[i][j] = global_index(fk_ctx.normal_z.ptr, fk_ctx.normal_z.pitch, xid, yid, noborder)[0];
-    float g_vec_east = global_index(fk_ctx.g_vec_east.ptr, fk_ctx.g_vec_east.pitch, xid, yid, noborder)[0];
-    float g_vec_north = global_index(fk_ctx.g_vec_north.ptr, fk_ctx.g_vec_north.pitch, xid, yid, noborder)[0];
-    float K_face_east  = global_index(fk_ctx.K_face_east.ptr, fk_ctx.K_face_east.pitch, xid, yid, noborder)[0];
-    float K_face_north = global_index(fk_ctx.K_face_north.ptr, fk_ctx.K_face_north.pitch, xid, yid, noborder)[0];
-    float pv = global_index(common_ctx.pv.ptr, common_ctx.pv.pitch, xid, yid, noborder)[0];
+    lambda_c_local[i][j] = global_index(fk_ctx.Lambda_c.ptr, fk_ctx.Lambda_c.pitch, new_xid, new_yid, noborder)[0];
+    lambda_b_local[i][j] = global_index(fk_ctx.Lambda_b.ptr, fk_ctx.Lambda_b.pitch, new_xid, new_yid, noborder)[0];
+    dlambda_c_local[i][j] = global_index(fk_ctx.dLambda_c.ptr, fk_ctx.Lambda_c.pitch, new_xid, new_yid, noborder)[0];
+    dlambda_b_local[i][j] = global_index(fk_ctx.dLambda_b.ptr, fk_ctx.Lambda_b.pitch, new_xid, new_yid, noborder)[0];
+    h_local[i][j] = global_index(fk_ctx.h.ptr, fk_ctx.h.pitch, new_xid, new_yid, noborder)[0];
+    z_local[i][j] = global_index(fk_ctx.z.ptr, fk_ctx.z.pitch, new_xid, new_yid, noborder)[0];
+    normal_z_local[i][j] = global_index(fk_ctx.normal_z.ptr, fk_ctx.normal_z.pitch, new_xid, new_yid, noborder)[0];
+    float g_vec_east = global_index(fk_ctx.g_vec_east.ptr, fk_ctx.g_vec_east.pitch, new_xid, new_yid, noborder)[0];
+    float g_vec_north = global_index(fk_ctx.g_vec_north.ptr, fk_ctx.g_vec_north.pitch, new_xid, new_yid, noborder)[0];
+    float K_face_east  = global_index(fk_ctx.K_face_east.ptr, fk_ctx.K_face_east.pitch, new_xid, new_yid, noborder)[0];
+    float K_face_north = global_index(fk_ctx.K_face_north.ptr, fk_ctx.K_face_north.pitch, new_xid, new_yid, noborder)[0];
+    float pv = global_index(common_ctx.pv.ptr, common_ctx.pv.pitch, new_xid, new_yid, noborder)[0];
+    float H = global_index(common_ctx.H.ptr, common_ctx.H.pitch, new_xid, new_yid, noborder)[0];
 
+    __syncthreads();
+    global_index(fk_ctx.U_x.ptr, fk_ctx.U_x.pitch, xid, yid, border)[0] = 0;
+    global_index(fk_ctx.U_y.ptr, fk_ctx.U_y.pitch, xid, yid, border)[0] = 0;
     __syncthreads();
 
     if (i < (TILEDIM_X+1) && j < (TILEDIM_Y+1)) {
     	dt_local = computeFluxEast(U_local_x, lambda_c_local, lambda_b_local,
-    			dlambda_c_local, dlambda_b_local, h_local, z_local, normal_z_local, K_face_east, g_vec_east, pv, i, j);
+    			dlambda_c_local, dlambda_b_local, h_local, z_local, normal_z_local, K_face_east, g_vec_east, pv,H, i, j);
     	dt_local = fminf(dt_local, computeFluxNorth(U_local_y, lambda_c_local, lambda_b_local,
-    			dlambda_c_local, dlambda_b_local, h_local, z_local, normal_z_local, K_face_north ,g_vec_north, pv, i, j));
-    	if (global_index(common_ctx.H.ptr, common_ctx.H.pitch, xid, yid, border)[0] == 0) {
+    			dlambda_c_local, dlambda_b_local, h_local, z_local, normal_z_local, K_face_north ,g_vec_north, pv,H, i, j));
+    	if (global_index(common_ctx.H.ptr, common_ctx.H.pitch, new_xid, new_yid, noborder)[0] == 0) {
     		dt_local = default_;
     		U_local_x[i][j] = 0;
     		U_local_y[i][j] = 0;
     	}
-    	if (active == -1){
+    	if (xid == 0 || yid == 0 || xid == common_ctx.nx || yid == common_ctx.ny) {
+    		dt_local = default_;
+    		U_local_x[i][j] = 0;
+    		U_local_y[i][j] = 0;
+    	}
+    	if (active_east == -1){
+    		U_local_x[i][j] = 0;
     		dt_local = default_;
     	}
+    	if (active_north == -1){
+    	    U_local_y[i][j] = 0;
+    	    dt_local = default_;
+    	}
+    	global_index(fk_ctx.test_output.ptr, fk_ctx.test_output.pitch , new_xid, new_yid, noborder)[0] = U_local_y[i][j];
     }
 
 
@@ -271,10 +290,11 @@ __global__ void FluxKernel(){
 
     __syncthreads();
 
-    if (xid > -1 && xid < common_ctx.nx && yid > -1 && yid < common_ctx.ny){
+    if (new_xid > -1 && new_xid < common_ctx.nx && new_yid > -1 && new_yid < common_ctx.ny){
         if (i < TILEDIM_X+1 && i > 0 && j < TILEDIM_Y+1 && j > 0) {
 				float r = (U_local_x[i][j] - U_local_x[i-1][j])+(U_local_y[i][j] - U_local_y[i][j-1]);
-				global_index(fk_ctx.R.ptr, fk_ctx.R.pitch, xid, yid, noborder)[0] = r;
+				if (abs(r) < 1000)
+					global_index(fk_ctx.R.ptr, fk_ctx.R.pitch, new_xid, new_yid, noborder)[0] = r;
 				timeStep[i][j] = dt_local;
         }
     }
@@ -287,7 +307,7 @@ __global__ void FluxKernel(){
     		//printf(" %i ", p);
     		//Write the maximum eigenvalues computed by this thread into shared memory
     		//Only consider eigenvalues within the internal domain
-    	/*	if (xid < flux_ctx.nx && yid < flux_ctx.ny && xid >= 0 && yid >=0){
+    	/*	if (xid < flux_ctx.nx && new_yid < flux_ctx.ny && xid >= 0 && yid >=0){
     			timeStep[0][p] = r;
     		}
     	*/
@@ -344,10 +364,16 @@ inline __device__ float solveForh(float S_c_new, float H, float h, float p_ci, f
 	float curr_p_cap = p_ci + g*delta_rho*(-z);
 	float curr_s_c = 1-computeBrineSaturation(curr_p_cap, C);
 	float prev_s_c = 0;
-	float S_c_remainder = 0;
+	bool corr_h =  false;
+	/*
+	if (h<1.127 && h >1.126){
+		printf("h %.5f curr_s_c: %f S_c_new: %f\n", h, curr_s_c, S_c_new);
+		corr_h = true;
+	}
+	*/
 	int i = 0;
-	if (H > 0.001 && 0 < S_c_new ){
-	while (sum < S_c_new && i <10000){
+	if (H > 0.0001 && 0 < S_c_new ){
+	while (sum < S_c_new && i <3000){
 		prev_s_c = curr_s_c;
 		z += dz;
 		curr_p_cap = p_ci + g*delta_rho*(-z);
@@ -355,14 +381,15 @@ inline __device__ float solveForh(float S_c_new, float H, float h, float p_ci, f
 		sum += 0.5*dz*(curr_s_c + prev_s_c);
 		i++;
 	}
+	//if (corr_h)
+		//printf("sum1: %.5f z1: %.5f\n", sum, z);
 	// For the last integration step we make a more exact approximation
 	z -= dz;
 	i = 0;
 	sum -= 0.5*dz*(curr_s_c + prev_s_c);
-	S_c_remainder = S_c_new - sum;
-	dz = dz/100;
+	dz = dz/10;
 	curr_s_c = prev_s_c;
-	while (sum < S_c_new && i <100000){
+	while (sum < S_c_new && i <10){
 		prev_s_c = curr_s_c;
 		z += dz;
 		curr_p_cap = p_ci + g*delta_rho*(-z);
@@ -370,13 +397,62 @@ inline __device__ float solveForh(float S_c_new, float H, float h, float p_ci, f
 		sum += 0.5*dz*(curr_s_c + prev_s_c);
 		i++;
 	}
+//	if (corr_h)
+	//	printf("sum2: %.5f z2: %.5f\n", sum, z);
+	z -= dz;
+	i = 0;
+	sum -= 0.5*dz*(curr_s_c + prev_s_c);
+	dz = dz/10;
+	curr_s_c = prev_s_c;
+	while (sum < S_c_new && i <10){
+		prev_s_c = curr_s_c;
+		z += dz;
+		curr_p_cap = p_ci + g*delta_rho*(-z);
+		curr_s_c = 1-computeBrineSaturation(curr_p_cap, C);
+		sum += 0.5*dz*(curr_s_c + prev_s_c);
+		i++;
 	}
+//	if (corr_h)
+	//	printf("sum3: %.5f z3: %.5f\n", sum, z);
+	z -= dz;
+	i = 0;
+	sum -= 0.5*dz*(curr_s_c + prev_s_c);
+	dz = dz/10;
+	curr_s_c = prev_s_c;
+	while (sum < S_c_new && i <10){
+		prev_s_c = curr_s_c;
+		z += dz;
+		curr_p_cap = p_ci + g*delta_rho*(-z);
+		curr_s_c = 1-computeBrineSaturation(curr_p_cap, C);
+		//if (corr_h)
+			//printf("sum4: %.5f z4: %.5f\n", sum, z);
+		sum += 0.5*dz*(curr_s_c + prev_s_c);
+		i++;
+	}
+	z -= dz;
+	i = 0;
+	sum -= 0.5*dz*(curr_s_c + prev_s_c);
+	dz = dz/10;
+	curr_s_c = prev_s_c;
+	while (sum < S_c_new && i <10){
+		prev_s_c = curr_s_c;
+		z += dz;
+		curr_p_cap = p_ci + g*delta_rho*(-z);
+		curr_s_c = 1-computeBrineSaturation(curr_p_cap, C);
+		//if (corr_h)
+			//printf("sum5: %.5f z5: %.5f\n", sum, z);
+		sum += 0.5*dz*(curr_s_c + prev_s_c);
+		i++;
+	}
+	}
+	//if (corr_h)
+		//printf("sum5: %.5f z5: %.5f\n", sum, z);
 	if (z > 0)
 		return z;
 	else
 		return 0;
-}
 
+}
 
 __global__ void TimeIntegrationKernel(){
 
@@ -387,13 +463,14 @@ __global__ void TimeIntegrationKernel(){
     int yid = blockIdx.y*blockDim.y + threadIdx.y-border;
     xid = fminf(xid, common_ctx.nx-1);
     yid = fminf(yid, common_ctx.ny-1);
-    int active = global_index(common_ctx.active_cells.ptr, common_ctx.active_cells.pitch, xid, yid, border)[0];
+    //global_index(common_ctx.active_cells.ptr, common_ctx.active_cells.pitch, xid, yid, border)[0] = 0;
 
     float H = global_index(common_ctx.H.ptr, common_ctx.H.pitch, xid, yid, border)[0];
     float pv = global_index(tik_ctx.pv.ptr, tik_ctx.pv.pitch, xid, yid, border)[0];
     float vol_old, vol_new, S_c_new;
     float S_c_old = global_index(tik_ctx.S_c.ptr, tik_ctx.S_c.pitch, xid, yid, border)[0];
     vol_old = global_index(tik_ctx.S_c.ptr, tik_ctx.S_c.pitch, xid, yid, border)[0]*pv;
+
     float r = global_index(tik_ctx.R.ptr, tik_ctx.R.pitch, xid, yid, border)[0];
 	float h =  global_index(tik_ctx.h.ptr, tik_ctx.h.pitch, xid, yid, 0)[0];
 	global_index(tik_ctx.h.ptr, tik_ctx.h.pitch, xid, yid, 0)[0] = 0;
@@ -406,7 +483,8 @@ __global__ void TimeIntegrationKernel(){
 							   xid, yid, 0)[0];
 
 		h  = solveForh(S_c_new, H, h, common_ctx.p_ci, tik_ctx.dz, common_ctx.delta_rho, common_ctx.g, C);
-
+		global_index(tik_ctx.vol_old.ptr, tik_ctx.vol_old.pitch, xid, yid, border)[0] = vol_old;
+		global_index(tik_ctx.vol_new.ptr, tik_ctx.vol_new.pitch, xid, yid, border)[0] = vol_new;
 		global_index(tik_ctx.h.ptr, tik_ctx.h.pitch, xid, yid, border)[0] = h;
     }
 
@@ -418,24 +496,19 @@ void callTimeIntegration(dim3 grid, dim3 block, TimeIntegrationKernelArgs* args)
 }
 
 // Function to compute the capillary pressure in the subintervals
-__device__ float computeLambda(float* lambda_c_and_b, float* dlambda_c_and_b, float p_ci, float g, float delta_rho, float H,float h, float dz, int n,
+__device__ float computeLambda(float* lambda_c_and_b, float p_ci, float g, float delta_rho, float H,float h, float dz, int n,
 							   float* k_values, float scaling_parameter_C){
 
-	float kr = k_values[n];
 	float curr_p_cap = p_ci + g*(delta_rho)*(dz*0-h);
 	float curr_satu_b = computeBrineSaturation(curr_p_cap, scaling_parameter_C);
 	float curr_mob_c = computeRelPerm(1-curr_satu_b, common_ctx.lambda_end_point_c);
 	float curr_mob_b = computeRelPerm(curr_satu_b, common_ctx.lambda_end_point_b);
 	float curr_mobk_c = curr_mob_c*k_values[0];
 	float curr_mobk_b = curr_mob_b*k_values[0];
-	float prev_mob_c = curr_mob_c;
-	float prev_mob_b = curr_mob_b;
 	float prev_mobk_c = curr_mobk_c;
 	float prev_mobk_b = curr_mobk_b;
 	float sum_c = 0;
 	float sum_b = 0;
-	float dsum_b = 0;
-	float dsum_c = 0;
 	if (n>0){
 		for (int i = 1; i < n; i++){
 			curr_p_cap = p_ci + g*(delta_rho)*(dz*i-h);
@@ -446,26 +519,17 @@ __device__ float computeLambda(float* lambda_c_and_b, float* dlambda_c_and_b, fl
 			curr_mobk_b = curr_mob_b*k_values[i];
 			sum_c += dz*0.5*(curr_mobk_c+prev_mobk_c);
 			sum_b += dz*0.5*(curr_mobk_b+prev_mobk_b);
-			dsum_c += dz*0.5*(curr_mob_c+prev_mob_c);
-			dsum_b += dz*0.5*(curr_mob_b+prev_mob_b);
 			prev_mobk_c = curr_mobk_c;
 			prev_mobk_b = curr_mobk_b;
-			prev_mob_c = curr_mob_c;
-			prev_mob_b = curr_mob_b;
 		}
 			curr_p_cap = p_ci + g*(delta_rho)*(h-h);
 			curr_satu_b = computeBrineSaturation(curr_p_cap, scaling_parameter_C);
 			curr_mob_c = computeRelPerm(1-curr_satu_b, common_ctx.lambda_end_point_c);
 			curr_mob_b = computeRelPerm(curr_satu_b, common_ctx.lambda_end_point_b);
-			dlambda_c_and_b[1] = dsum_b/H; //common_ctx.mu_b;
 			curr_mobk_c = curr_mob_c*k_values[n];
 			curr_mobk_b = curr_mob_b*k_values[n];
-			dsum_c += dz*0.5*(curr_mob_c+prev_mob_c);
-			dsum_b += dz*0.5*(curr_mob_b+prev_mob_b);
 			sum_c += 0.5*(prev_mobk_c+curr_mobk_c)*(h-dz*(n-1));
 			sum_b += 0.5*(prev_mobk_b+curr_mobk_b)*(h-dz*(n-1));
-			dsum_c += 0.5*(prev_mob_c+curr_mob_c)*(h-dz*(n-1));
-			dsum_b += 0.5*(prev_mob_b+curr_mob_b)*(h-dz*(n-1));
 	}
 		// Add last part of integral to b
 		prev_mobk_b = curr_mobk_b;
@@ -474,7 +538,6 @@ __device__ float computeLambda(float* lambda_c_and_b, float* dlambda_c_and_b, fl
 		sum_b += 0.5*(prev_mobk_b+curr_mobk_b)*(dz*n-h);
 		curr_mob_b = computeRelPerm(1, common_ctx.lambda_end_point_b);
 		float K_frac = trapezoidal(H-dz*n, cpi_ctx.dz, ceil((H-dz*n)/dz), (k_values+n));
-		dsum_b += curr_mob_b*(H-h);
 		sum_b += K_frac*curr_mob_b;
 		lambda_c_and_b[0] = sum_c/common_ctx.mu_c;
 		lambda_c_and_b[1] = sum_b/common_ctx.mu_b;
@@ -523,24 +586,21 @@ __global__ void CoarseMobIntegrationKernel(int gridDimX){
 		float* k_values = global_index(cpi_ctx.perm_distribution, xid, yid, 0, 0);
 
 		float lambda_c_and_b[2];
-		float dlambda_c_and_b[2];
 
 		float C = global_index(cmi_ctx.scaling_parameter_C.ptr, cmi_ctx.scaling_parameter_C.pitch,
 							   xid, yid, 0)[0];
 
-		float L = computeLambda(lambda_c_and_b, dlambda_c_and_b, cmi_ctx.p_ci, common_ctx.g, common_ctx.delta_rho, H, h, cmi_ctx.dz,
+		float L = computeLambda(lambda_c_and_b, cmi_ctx.p_ci, common_ctx.g, common_ctx.delta_rho, H, h, cmi_ctx.dz,
 				nIntervalsForh, k_values, C);
 		if (K != 0){
-			global_index(cmi_ctx.Lambda_c.ptr, cmi_ctx.Lambda_c.pitch, xid, yid, 0)[0] =  lambda_c_and_b[0]/K;
-			global_index(cmi_ctx.Lambda_b.ptr, cmi_ctx.Lambda_b.pitch, xid, yid, 0)[0] =  lambda_c_and_b[1]/K;
-			global_index(cmi_ctx.dLambda_c.ptr, cmi_ctx.dLambda_c.pitch, xid, yid, 0)[0] = 1/common_ctx.mu_c;
-			global_index(cmi_ctx.dLambda_b.ptr, cmi_ctx.dLambda_b.pitch, xid, yid, 0)[0] = 1/common_ctx.mu_b;
-			/*
-			global_index(cmi_ctx.dLambda_c.ptr, cmi_ctx.dLambda_c.pitch, xid, yid, 0)[0] =
-					     computeRelPerm(common_ctx.s_c_res, common_ctx.lambda_end_point_c)*k_values[nIntervalsForh]/(common_ctx.mu_c*K);
-			global_index(cmi_ctx.dLambda_b.ptr, cmi_ctx.dLambda_b.pitch, xid, yid, 0)[0] =
-						 computeRelPerm(1-common_ctx.s_c_res, common_ctx.lambda_end_point_b)*k_values[nIntervalsForh]/(common_ctx.mu_b*K);
-			*/
+			global_index(cmi_ctx.Lambda_c.ptr, cmi_ctx.Lambda_c.pitch, xid, yid, 0)[0] =  lambda_c_and_b[0]/(K*H);
+			global_index(cmi_ctx.Lambda_b.ptr, cmi_ctx.Lambda_b.pitch, xid, yid, 0)[0] =  lambda_c_and_b[1]/(K*H);
+			float rel_perm_b_at_h = computeRelPerm(1-common_ctx.s_c_res, common_ctx.lambda_end_point_b);
+			float rel_perm_c_at_h = computeRelPerm(common_ctx.s_c_res, common_ctx.lambda_end_point_c);
+			float dlambda_c = rel_perm_c_at_h*k_values[nIntervalsForh]/(common_ctx.mu_c*K*H);
+			float dlambda_b = rel_perm_b_at_h*k_values[nIntervalsForh]/(common_ctx.mu_b*K*H);
+			global_index(cmi_ctx.dLambda_c.ptr, cmi_ctx.dLambda_c.pitch, xid, yid, 0)[0] = dlambda_c;
+			global_index(cmi_ctx.dLambda_b.ptr, cmi_ctx.dLambda_b.pitch, xid, yid, 0)[0] = dlambda_b;
 		}
 	}
 }
@@ -591,16 +651,16 @@ __global__ void TimestepReductionKernel(){
 		if (tid == 0) {
 			dt = sdata_volatile[tid];
 			if (dt == FLT_MAX) {
-				//If no water at all, and no sources,
-				//we really do not need to simulate,
-				//but using FLT_MAX will make things crash...
 				dt = 100;
 			}
 			dt = dt*trk_ctx.cfl_scale*(1-common_ctx.s_b_res-common_ctx.s_c_res);
 			float tf = trk_ctx.global_dt[2];
 			float t = trk_ctx.global_dt[1];
-			trk_ctx.global_dt[0] = min(tf-t, dt);
-			trk_ctx.global_dt[1] += trk_ctx.global_dt[0];
+			trk_ctx.global_dt[0] = fminf(dt, tf-t);
+			if ((tf-t) < dt)
+					trk_ctx.global_dt[1] = 0;
+			else
+				trk_ctx.global_dt[1] += trk_ctx.global_dt[0];
 
 		//	printf("TID %i",tid);
 		}

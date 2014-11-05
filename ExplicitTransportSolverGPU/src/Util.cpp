@@ -50,9 +50,11 @@ void createGridMask(CpuPtr_2D H, dim3 grid, dim3 block, int nx, int ny, std::vec
 
 void setCommonArgs(CommonArgs* args, float p_ci, float delta_rho, float g, float mu_c, float mu_b,
 				   float s_c_res, float s_b_res, float l_e_p_c, float l_e_p_b,
-				   GpuRawPtr active_cells, GpuRawPtr H, GpuRawPtr pv,
+				   GpuRawPtr active_east, GpuRawPtr active_north,
+				   GpuRawPtr H, GpuRawPtr pv,
 			       unsigned int nx, unsigned int ny, unsigned int border){
-	args->active_cells = active_cells;
+	args->active_east = active_east;
+	args->active_north = active_north;
 	args->H = H;
 	args->pv = pv;
 
@@ -113,11 +115,12 @@ void setFluxKernelArgs(FluxKernelArgs* args,
 					   GpuRawPtr h, GpuRawPtr z, GpuRawPtr normal_z,
 					   GpuRawPtr K_face_east, GpuRawPtr K_face_north,
 					   GpuRawPtr g_vec_east, GpuRawPtr g_vec_north,
-					   GpuRawPtr R, float* dt_vector){
+					   GpuRawPtr R, float* dt_vector, GpuRawPtr test_output){
 	args->Lambda_c = Lambda_c;
 	args->Lambda_b = Lambda_b;
 	args->dLambda_c = dLambda_c;
 	args->dLambda_b = dLambda_b;
+	args->test_output = test_output;
 	args->U_x = U_x;
 	args->U_y = U_y;
 	args->h = h;
@@ -134,9 +137,11 @@ void setFluxKernelArgs(FluxKernelArgs* args,
 
 void setTimeIntegrationKernelArgs(TimeIntegrationKernelArgs* args, float* global_dt, float dz,
 								  GpuRawPtr pv, GpuRawPtr h, GpuRawPtr F,
-								  GpuRawPtr S_c, GpuRawPtr scaling_para_C, GpuRawPtr zeros){
+								  GpuRawPtr S_c, GpuRawPtr scaling_para_C,
+								  GpuRawPtr vol_old, GpuRawPtr vol_new){
 	args->global_dt = global_dt;
-	args->zeros = zeros;
+	args->vol_old = vol_old;
+	args->vol_new = vol_new;
 	args->dz = dz;
 	args->pv = pv;
 	args->h = h;
@@ -165,11 +170,7 @@ float computeCoarseSaturation(float p_ci, float g, float delta_rho, float s_b_re
     //printf("n: %i h: %.15f", n, h);
 	float current_satu_c = 0;
 	float prev_satu_c = 1-computeBrineSaturation(current_p_cap, scaling_parameter_C, s_b_res);
-	if (h > 2.12 && h < 2.13){
-		float C = scaling_parameter_C;
-		printf("n: %i  ceil: %.5f  prev satu: %.4f \n", n , dz, prev_satu_c);
-	}
-
+	bool corr_h = false;
 	float sum_c = 0;
 	if (n>0){
 		for (int i = 1; i < n; i++){
@@ -180,9 +181,10 @@ float computeCoarseSaturation(float p_ci, float g, float delta_rho, float s_b_re
 		}
 			current_p_cap = p_ci + g*(delta_rho)*(h-h);
 			current_satu_c = 1-computeBrineSaturation(current_p_cap, scaling_parameter_C, s_b_res);
+
 			sum_c += 0.5*(prev_satu_c+current_satu_c)*(h-dz*(n-1));
 	}
-	if (h > 2.12 && h < 2.13){
+	if (h > 1.126 && h < 1.128){
 		float C = scaling_parameter_C;
 		printf("sum_c%.4f \n", sum_c);
 	}

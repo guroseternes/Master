@@ -40,6 +40,18 @@ void printArray(int n, float* array){
 	}
 }
 
+float computeTotalVolume(GpuPtr_2D vol_device, int nx, int ny){
+	CpuPtr_2D vol(nx,ny,0,true);
+	vol_device.download(vol.getPtr(), 0, 0, nx, ny);
+	float tot_vol = 0;
+	for (int j=0; j<ny; j++){
+		for (int i=0; i<nx; i++){
+			tot_vol += vol(i,j);
+		}
+	}
+	return tot_vol;
+}
+
 double getWallTime(){
     struct timeval time;
     if (gettimeofday(&time,NULL)){
@@ -49,7 +61,24 @@ double getWallTime(){
     return (double)time.tv_sec + (double)time.tv_usec * .000001;
 }
 
-void readActiveCellsFromMATLABFile(const char* filename, float* active_cells) {
+void readTextFile(const char* filename, CpuPtr_2D& matrix) {
+	FILE * pFile;
+	int i, j;
+	double value;
+	pFile = fopen (filename , "r");
+	if (pFile == NULL) perror ("Error opening file");
+
+	else {
+		while(fscanf (pFile, "%i %i %lf\n", &i, &j, &value) != EOF ){
+			if (i==51 && j == 52)
+				printf("Copy from MATLAB file %.15f", value);
+			matrix(i,j) = value;
+		}
+	}
+
+}
+
+void readFluxesFromMATLABFile(const char* filename, float* east_flux, float* north_flux) {
 
 mat_t *matfp;
 matvar_t *matvar;
@@ -64,7 +93,45 @@ Mat_VarReadDataAll(matfp, matvar);
 nx = matvar->dims[0];
 ny = matvar->dims[1];
 int size = nx*ny;
-memcpy(active_cells, matvar->data,sizeof(float)*size);
+memcpy(east_flux, matvar->data,sizeof(float)*size);
+Mat_VarFree(matvar);
+matvar = NULL;
+
+matvar = Mat_VarReadNextInfo(matfp);
+Mat_VarReadDataAll(matfp, matvar);
+nx = matvar->dims[0];
+ny = matvar->dims[1];
+size = nx*ny;
+memcpy(north_flux, matvar->data,sizeof(float)*size);
+Mat_VarFree(matvar);
+matvar = NULL;
+
+}
+
+void readActiveCellsFromMATLABFile(const char* filename, float* active_east, float* active_north) {
+
+mat_t *matfp;
+matvar_t *matvar;
+matfp = Mat_Open(filename, MAT_ACC_RDONLY);
+if ( NULL == matfp ) {
+	fprintf(stderr,"Error opening MAT file");
+}
+int nx, ny, nz;
+
+matvar = Mat_VarReadNextInfo(matfp);
+Mat_VarReadDataAll(matfp, matvar);
+nx = matvar->dims[0];
+ny = matvar->dims[1];
+int size = nx*ny;
+memcpy(active_east, matvar->data,sizeof(float)*size);
+Mat_VarFree(matvar);
+matvar = NULL;
+
+matvar = Mat_VarReadNextInfo(matfp);
+Mat_VarReadDataAll(matfp, matvar);
+nx = matvar->dims[0];
+ny = matvar->dims[1];
+memcpy(active_north, matvar->data,sizeof(float)*size);
 Mat_VarFree(matvar);
 matvar = NULL;
 }
@@ -155,13 +222,11 @@ memcpy(z_normal, matvar->data,sizeof(float)*size);
 Mat_VarFree(matvar);
 matvar = NULL;
 
-//perm3D = CpuPtr_3D(nx, ny, nz, 0, true);
 matvar = Mat_VarReadNextInfo(matfp);
 Mat_VarReadDataAll(matfp, matvar);
 nz = matvar->dims[0];
 ny = matvar->dims[1];
 nx = matvar->dims[2];
-printf("3D dims: nx %i ny %i nz %i\n", nx, ny, nz);
 memcpy(perm3D, matvar->data,sizeof(float)*nx*ny*nz);
 Mat_VarFree(matvar);
 matvar = NULL;
