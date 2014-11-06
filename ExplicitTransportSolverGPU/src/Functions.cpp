@@ -50,13 +50,14 @@ void printArray(int n, float* array){
 	}
 }
 
-float computeTotalVolume(GpuPtr_2D vol_device, int nx, int ny){
-	CpuPtr_2D vol(nx,ny,0,true);
-	vol_device.download(vol.getPtr(), 0, 0, nx, ny);
+float computeTotalVolume(CpuPtr_2D vol, int nx, int ny){
+	//CpuPtr_2D vol(nx,ny,0,true);
+	//vol_device.download(vol.getPtr(), 0, 0, nx, ny);
 	float tot_vol = 0;
 	for (int j=0; j<ny; j++){
 		for (int i=0; i<nx; i++){
-			tot_vol += vol(i,j);
+			if (!isnan(vol(i,j)))
+				tot_vol += vol(i,j);
 		}
 	}
 	return tot_vol;

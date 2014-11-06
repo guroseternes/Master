@@ -8,12 +8,12 @@ InitialConditions::InitialConditions(int nx, int ny, float dz){
 
 	this->cfl_scale = 0.5*0.25;
 	this->dt_test = 4.3711 * pow((float)10, 7);
-	this->global_time_data[0] = dt_test/3;
+	this->global_time_data[0] = 0;
 	this->global_time_data[1] = 0;
 	//tf
 	this->global_time_data[2] = 157680000;
 
-	this->integral_res = 0.1f;
+	this->integral_res = 1.0f;
 	// Density difference between brine and CO2
 	this->delta_rho = 686.54-975.86;
 	// Gravitational acceleration
@@ -48,9 +48,9 @@ InitialConditions::InitialConditions(int nx, int ny, float dz){
 	}
 }
 void InitialConditions::computeAllGridBlocks(){
-	computeGridBlock(grid, block, nx, ny, BLOCKDIM_X, BLOCKDIM_Y);
-	computeGridBlock(grid_flux, block_flux, nx + 2*border, ny + 2*border, BLOCKDIM_X,
-			BLOCKDIM_Y, TILEDIM_X, TILEDIM_Y);
+	computeGridBlock(grid, block, nx, ny, BLOCKDIM_X_FLUX, BLOCKDIM_Y_FLUX);
+	computeGridBlock(grid_flux, block_flux, nx + 2*border, ny + 2*border, BLOCKDIM_X_FLUX,
+			BLOCKDIM_Y_FLUX, TILEDIM_X, TILEDIM_Y);
 }
 
 void InitialConditions::createDtVec(){
@@ -80,7 +80,7 @@ void InitialConditions::createScalingParameterTable(CpuPtr_2D H){
 
 void InitialConditions::createInitialCoarseSatu(CpuPtr_2D H, CpuPtr_2D h){
 	initial_coarse_satu_c = CpuPtr_2D(nx, ny, 0, true);
-	float res = integral_res/10;
+	float res = integral_res/100;
 	for (int j = 0; j < ny; j++){
 			for (int i = 0; i < nx; i++){
 				initial_coarse_satu_c(i,j) = computeCoarseSaturation(p_ci, g, delta_rho, s_b_res, h(i,j), res, ceil(h(i,j)/res),

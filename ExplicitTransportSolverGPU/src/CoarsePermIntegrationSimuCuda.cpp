@@ -46,6 +46,7 @@ int main() {
 	CpuPtr_2D K_face_east(nx, ny, 0, true);
 	CpuPtr_2D active_east(nx, ny, 0, true);
 	CpuPtr_2D active_north(nx, ny, 0, true);
+	CpuPtr_2D volume(nx, ny, 0,true);
 
 	filename = "johansendata.mat";
 	readFormationDataFromMATLABFile(filename, H.getPtr(), top_surface.getPtr(),
@@ -190,6 +191,11 @@ int main() {
 	setTimestepReductionKernelArgs(&time_red_kernel_args, TIME_THREADS, IC.nElements, global_dt_device.getRawPtr(),
 								   IC.cfl_scale, dt_vector_device.getRawPtr());
 
+	callCoarseMobIntegrationKernel(new_sparse_grid, IC.block, IC.grid.x, &coarse_mob_int_args);
+	callFluxKernel(IC.grid_flux, IC.block_flux, &flux_kernel_args);
+	callTimeIntegration(new_sparse_grid, IC.block, IC.grid.x, &time_int_kernel_args);
+	vol_old_device.download(volume.getPtr(), 0, 0, nx, ny);
+	float total_volume_old = computeTotalVolume(volume, nx, ny);
 	t = 0;
 	tf = IC.global_time_data[2];
 	int iter = 0;
@@ -210,7 +216,7 @@ int main() {
 
 				callTimestepReductionKernel(TIME_THREADS, &time_red_kernel_args);
 
-				callTimeIntegration(IC.grid, IC.block, &time_int_kernel_args);
+				callTimeIntegration(new_sparse_grid, IC.block, IC.grid.x, &time_int_kernel_args);
 
 				cudaMemcpy(IC.global_time_data, global_dt_device.getRawPtr(), sizeof(float)*3, cudaMemcpyDeviceToHost);
 
@@ -226,7 +232,8 @@ int main() {
 			memcpy((void *)mxGetPr(h_matrix), (void *)h_matlab_matrix, sizeof(double)*nx*ny);
 			engPutVariable(ep, "h_matrix", h_matrix);
 			engEvalString(ep, "pressureFunctionToRunfromCpp(h_matrix, variables);");
-			/*engEvalString(ep, "[east_flux, north_flux] = pressureFunctionToRunfromCpp(h_matrix, variables);");
+			/*
+			engEvalString(ep, "[east_flux, north_flux] = pressureFunctionToRunfromCpp(h_matrix, variables);");
 			flux_east_matrix = engGetVariable(ep, "east_flux");
 			flux_north_matrix = engGetVariable(ep, "north_flux");
 			memcpy((void *)flux_east.getPtr(), (void *)mxGetPr(flux_east_matrix), sizeof(float)*nx*ny);
@@ -248,10 +255,10 @@ int main() {
 	h_device.download(zeros.getPtr(), 0, 0, nx, ny);
 	zeros.printToFile(matlab_file);
 
-	float total_volume_old = computeTotalVolume(vol_old_device, nx, ny);
-	float total_volume_new = computeTotalVolume(vol_new_device, nx, ny);
+	vol_old_device.download(zeros.getPtr(), 0, 0, nx, ny);
+	float total_volume_new = computeTotalVolume(zeros, nx, ny);
 
-	printf("total volume new %.2f total volume old %.2f frac: %.7f",
+	printf("total volume new %.2f total volume old %.2f frac: %.10f",
 			total_volume_new, total_volume_old, (total_volume_old-total_volume_new)/(total_volume_old));
 
 	printf("Load error: %s\n", cudaGetErrorString(cudaGetLastError()));
@@ -266,7 +273,7 @@ int main() {
 
 	printf("\nCudaMemcpy error: %s", cudaGetErrorString(cudaGetLastError()));
 	printf("\n Global timestep manual: %.2f Global timestep from Kernel: %.2f\n", mini, IC.global_time_data[0]);
-	printf("dt from MATLAB: %.3f global_dt from kernel: %.3f\n", dt/(60*60*24), IC.global_time_data[0]/(60*60*24));
+	printf("Total time: %.3f global_dt from kernel: %.3f\n", totTime, IC.global_time_data[0]/(60*60*24));
 	printf("FINITO");
 
 	//printf("Check results %.3f", CheckResults(6,0));

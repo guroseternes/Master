@@ -52,14 +52,14 @@ __device__ float trapezoidal(float H, float dz, int n, float* function_values){
 	return 0.5*(sum*dz + extra);
 }
 
-inline __device__ float computeFluxEast(float (&U)[BLOCKDIM_X][SM_BLOCKDIM_Y],
-									   float (&lambda_c)[BLOCKDIM_X][SM_BLOCKDIM_Y],
-									   float (&lambda_b)[BLOCKDIM_X][SM_BLOCKDIM_Y],
-									   float (&dlambda_c)[BLOCKDIM_X][SM_BLOCKDIM_Y],
-									   float (&dlambda_b)[BLOCKDIM_X][SM_BLOCKDIM_Y],
-									   float (&h)[BLOCKDIM_X][SM_BLOCKDIM_Y],
-									   float (&z)[BLOCKDIM_X][SM_BLOCKDIM_Y],
-									   float(&normal_z)[BLOCKDIM_X][SM_BLOCKDIM_Y],
+inline __device__ float computeFluxEast(float (&U)[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y],
+									   float (&lambda_c)[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y],
+									   float (&lambda_b)[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y],
+									   float (&dlambda_c)[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y],
+									   float (&dlambda_b)[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y],
+									   float (&h)[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y],
+									   float (&z)[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y],
+									   float(&normal_z)[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y],
 									   float K_face, float g_vec, float pv, float H,
 									   unsigned int i, unsigned int j, float &upwindThis){
 	float face_mob_c, face_mob_b, dface_mob_c, dface_mob_b, tot_mob, F_c;
@@ -128,14 +128,14 @@ inline __device__ float computeFluxEast(float (&U)[BLOCKDIM_X][SM_BLOCKDIM_Y],
 	return dt_temp;
 }
 
-inline __device__ float computeFluxNorth(float (&U)[BLOCKDIM_X][SM_BLOCKDIM_Y],
-									   float (&lambda_c)[BLOCKDIM_X][SM_BLOCKDIM_Y],
-									   float (&lambda_b)[BLOCKDIM_X][SM_BLOCKDIM_Y],
-									   float (&dlambda_c)[BLOCKDIM_X][SM_BLOCKDIM_Y],
-									   float (&dlambda_b)[BLOCKDIM_X][SM_BLOCKDIM_Y],
-									   float (&h)[BLOCKDIM_X][SM_BLOCKDIM_Y],
-									   float (&z)[BLOCKDIM_X][SM_BLOCKDIM_Y],
-									   float (&normal_z)[BLOCKDIM_X][SM_BLOCKDIM_Y],
+inline __device__ float computeFluxNorth(float (&U)[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y],
+									   float (&lambda_c)[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y],
+									   float (&lambda_b)[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y],
+									   float (&dlambda_c)[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y],
+									   float (&dlambda_b)[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y],
+									   float (&h)[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y],
+									   float (&z)[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y],
+									   float (&normal_z)[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y],
 									   float K_face, float g_vec, float pv, float H,
 									   unsigned int i, unsigned int j){
 	float face_mob_c, face_mob_b, dface_mob_c, dface_mob_b, tot_mob, F_c;
@@ -225,19 +225,19 @@ __global__ void FluxKernel(){
     int active_east = global_index(common_ctx.active_east.ptr, common_ctx.active_east.pitch,
     		                        new_xid, new_yid, noborder)[0];
 
-    __shared__ float U_local_x[BLOCKDIM_X][SM_BLOCKDIM_Y];
-    __shared__ float U_local_y[BLOCKDIM_X][SM_BLOCKDIM_Y];
-    __shared__ float lambda_c_local[BLOCKDIM_X][SM_BLOCKDIM_Y];
-    __shared__ float lambda_b_local[BLOCKDIM_X][SM_BLOCKDIM_Y];
-    __shared__ float dlambda_c_local[BLOCKDIM_X][SM_BLOCKDIM_Y];
-    __shared__ float dlambda_b_local[BLOCKDIM_X][SM_BLOCKDIM_Y];
-    __shared__ float h_local[BLOCKDIM_X][SM_BLOCKDIM_Y];
-    __shared__ float z_local[BLOCKDIM_X][SM_BLOCKDIM_Y];
-    __shared__ float normal_z_local[BLOCKDIM_X][SM_BLOCKDIM_Y];
+    __shared__ float U_local_x[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y];
+    __shared__ float U_local_y[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y];
+    __shared__ float lambda_c_local[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y];
+    __shared__ float lambda_b_local[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y];
+    __shared__ float dlambda_c_local[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y];
+    __shared__ float dlambda_b_local[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y];
+    __shared__ float h_local[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y];
+    __shared__ float z_local[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y];
+    __shared__ float normal_z_local[BLOCKDIM_X_FLUX][SM_BLOCKDIM_Y];
 
     //TIMESTEP BLOCK
-	const int nthreads = BLOCKDIM_X*BLOCKDIM_Y;
-	__shared__ float timeStep[BLOCKDIM_X][BLOCKDIM_Y];
+	const int nthreads = BLOCKDIM_X_FLUX*BLOCKDIM_Y_FLUX;
+	__shared__ float timeStep[BLOCKDIM_X_FLUX][BLOCKDIM_Y_FLUX];
 	float default_ = FLT_MAX;
 	float dt_local = default_;
 	timeStep[i][j] = default_;
@@ -361,6 +361,7 @@ void callFluxKernel(dim3 grid, dim3 block, FluxKernelArgs* args){
 	FluxKernel<<<grid, block>>>();
 }
 
+
 inline __device__ float solveForh(float S_c_new, float H, float h, float p_ci, float dz, float delta_rho, float g, float C){
 	float sum = 0;
 	float z = 0;
@@ -376,7 +377,7 @@ inline __device__ float solveForh(float S_c_new, float H, float h, float p_ci, f
 	*/
 	int i = 0;
 	if (H > 0.0001 && 0 < S_c_new ){
-	while (sum < S_c_new && i <3000){
+	while (sum < S_c_new && i <200){
 		prev_s_c = curr_s_c;
 		z += dz;
 		curr_p_cap = p_ci + g*delta_rho*(-z);
@@ -447,6 +448,36 @@ inline __device__ float solveForh(float S_c_new, float H, float h, float p_ci, f
 		sum += 0.5*dz*(curr_s_c + prev_s_c);
 		i++;
 	}
+	z -= dz;
+	i = 0;
+	sum -= 0.5*dz*(curr_s_c + prev_s_c);
+	dz = dz/10;
+	curr_s_c = prev_s_c;
+	while (sum < S_c_new && i <10){
+		prev_s_c = curr_s_c;
+		z += dz;
+		curr_p_cap = p_ci + g*delta_rho*(-z);
+		curr_s_c = 1-computeBrineSaturation(curr_p_cap, C);
+		//if (corr_h)
+			//printf("sum5: %.5f z5: %.5f\n", sum, z);
+		sum += 0.5*dz*(curr_s_c + prev_s_c);
+		i++;
+	}
+	z -= dz;
+	i = 0;
+	sum -= 0.5*dz*(curr_s_c + prev_s_c);
+	dz = dz/10;
+	curr_s_c = prev_s_c;
+	while (sum < S_c_new && i <10){
+		prev_s_c = curr_s_c;
+		z += dz;
+		curr_p_cap = p_ci + g*delta_rho*(-z);
+		curr_s_c = 1-computeBrineSaturation(curr_p_cap, C);
+		//if (corr_h)
+			//printf("sum5: %.5f z5: %.5f\n", sum, z);
+		sum += 0.5*dz*(curr_s_c + prev_s_c);
+		i++;
+	}
 	}
 	//if (corr_h)
 		//printf("sum5: %.5f z5: %.5f\n", sum, z);
@@ -457,45 +488,44 @@ inline __device__ float solveForh(float S_c_new, float H, float h, float p_ci, f
 
 }
 
-__global__ void TimeIntegrationKernel(){
+__global__ void TimeIntegrationKernel(int gridDimX){
 
 	// Global id
-	int border = 0; //common_ctx.border;
+	int noborder = 0; //common_ctx.border;
 	int dt = tik_ctx.global_dt[0];
-	int xid = blockIdx.x*blockDim.x + threadIdx.x-border;
-    int yid = blockIdx.y*blockDim.y + threadIdx.y-border;
+	int xid = (cmi_ctx.active_block_indexes.ptr[blockIdx.x] % gridDimX)*blockDim.x + threadIdx.x;
+    int yid = (cmi_ctx.active_block_indexes.ptr[blockIdx.x]/gridDimX)*blockDim.y + threadIdx.y;
     xid = fminf(xid, common_ctx.nx-1);
     yid = fminf(yid, common_ctx.ny-1);
     //global_index(common_ctx.active_cells.ptr, common_ctx.active_cells.pitch, xid, yid, border)[0] = 0;
 
-    float H = global_index(common_ctx.H.ptr, common_ctx.H.pitch, xid, yid, border)[0];
-    float pv = global_index(tik_ctx.pv.ptr, tik_ctx.pv.pitch, xid, yid, border)[0];
+    float H = global_index(common_ctx.H.ptr, common_ctx.H.pitch, xid, yid, noborder)[0];
+    float pv = global_index(tik_ctx.pv.ptr, tik_ctx.pv.pitch, xid, yid, noborder)[0];
     float vol_old, vol_new, S_c_new;
-    float S_c_old = global_index(tik_ctx.S_c.ptr, tik_ctx.S_c.pitch, xid, yid, border)[0];
-    vol_old = global_index(tik_ctx.S_c.ptr, tik_ctx.S_c.pitch, xid, yid, border)[0]*pv;
+    float S_c_old = global_index(tik_ctx.S_c.ptr, tik_ctx.S_c.pitch, xid, yid, noborder)[0];
+    vol_old = global_index(tik_ctx.S_c.ptr, tik_ctx.S_c.pitch, xid, yid, noborder)[0]*pv;
 
-    float r = global_index(tik_ctx.R.ptr, tik_ctx.R.pitch, xid, yid, border)[0];
+    float r = global_index(tik_ctx.R.ptr, tik_ctx.R.pitch, xid, yid, noborder)[0];
 	float h =  global_index(tik_ctx.h.ptr, tik_ctx.h.pitch, xid, yid, 0)[0];
 	global_index(tik_ctx.h.ptr, tik_ctx.h.pitch, xid, yid, 0)[0] = 0;
     vol_new = vol_old - dt*r;
     if (pv != 0){
 		S_c_new = vol_new/pv;
-		global_index(tik_ctx.S_c.ptr, tik_ctx.S_c.pitch, xid, yid, border)[0] = S_c_new;
+		global_index(tik_ctx.S_c.ptr, tik_ctx.S_c.pitch, xid, yid, noborder)[0] = S_c_new;
 
 		float C = global_index(tik_ctx.scaling_parameter_C.ptr, tik_ctx.scaling_parameter_C.pitch,
 							   xid, yid, 0)[0];
 
 		h  = solveForh(S_c_new, H, h, common_ctx.p_ci, tik_ctx.dz, common_ctx.delta_rho, common_ctx.g, C);
-		global_index(tik_ctx.vol_old.ptr, tik_ctx.vol_old.pitch, xid, yid, border)[0] = vol_old;
-		global_index(tik_ctx.vol_new.ptr, tik_ctx.vol_new.pitch, xid, yid, border)[0] = vol_new;
-		global_index(tik_ctx.h.ptr, tik_ctx.h.pitch, xid, yid, border)[0] = h;
+		global_index(tik_ctx.vol_old.ptr, tik_ctx.vol_old.pitch, xid, yid, noborder)[0] = vol_old;
+		global_index(tik_ctx.h.ptr, tik_ctx.h.pitch, xid, yid, noborder)[0] = h;
     }
 
 }
 
 void callTimeIntegration(dim3 grid, dim3 block, int gridDimX, TimeIntegrationKernelArgs* args){
 	cudaMemcpyToSymbolAsync(tik_ctx, args, sizeof(TimeIntegrationKernelArgs), 0, cudaMemcpyHostToDevice);
-	TimeIntegrationKernel<<<grid, block>>>();
+	TimeIntegrationKernel<<<grid, block>>>(gridDimX);
 }
 
 // Function to compute the capillary pressure in the subintervals

@@ -15,7 +15,7 @@ using namespace std;
 void print_properties();
 void startMatlabEngine(Engine* ep);
 float maximum(int n, float* array);
-float computeTotalVolume(GpuPtr_2D vol_device, int nx, int ny);
+float computeTotalVolume(CpuPtr_2D vol, int nx, int ny);
 void printArray(int n, float* array);
 double getWallTime();
 void readTextFile(const char* filename, CpuPtr_2D& matrix);
