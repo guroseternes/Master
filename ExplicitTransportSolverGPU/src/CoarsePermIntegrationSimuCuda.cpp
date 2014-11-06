@@ -18,8 +18,8 @@ int main() {
 	int nx, ny, nz;
 	float dt, dz;
 	float t, tf;
-	t = 0;
-	tf = 157680000;
+	int year = 60*60*24*365;
+	bool run = true;
 	char* filename = "dimensions.mat";
 	cudaSetDevice(1);
 	int device;
@@ -40,8 +40,6 @@ int main() {
 	CpuPtr_2D pv(nx, ny, 0, true);
 	CpuPtr_2D flux_north(nx, ny, IC.border, true);
 	CpuPtr_2D flux_east(nx, ny, IC.border, true);
-	CpuPtr_2D flux_north_2(nx, ny, IC.border, true);
-	CpuPtr_2D flux_east_2(nx, ny, IC.border, true);
 	CpuPtr_2D grav_north(nx, ny, 0, true);
 	CpuPtr_2D grav_east(nx, ny, 0, true);
 	CpuPtr_2D K_face_north(nx, ny, 0, true);
@@ -58,12 +56,6 @@ int main() {
 	filename = "active_cells.mat";
 	readActiveCellsFromMATLABFile(filename, active_east.getPtr(), active_north.getPtr());
 
-	printf("dz: %.3f nz: %i\n", dz, nz);
-	printf("h(52,53) %.3f east_grav(45,50): %.3f north_flux(50,50): %.16f\n",
-			h(52, 53), grav_east(45, 50), flux_north(45, 50));
-	printf("poro3d(45, 50, 1) : %.15f\n", poro3D(45, 50, 1));
-	printf("perm3d(45, 50, 1) : %.15f\n", perm3D(45, 50, 1));
-
 	// Files with results
 	FILE* Lambda_integration_file;
 	Lambda_integration_file = fopen("Lambda_integration_sparse.txt", "w");
@@ -73,22 +65,21 @@ int main() {
 	Check_results_file = fopen("Check_results.txt", "w");
 
 	Engine *ep;
-	mxArray *T = NULL, *result = NULL;
+	mxArray *h_matrix = NULL, *flux_east_matrix = NULL, *flux_north_matrix=NULL;
+	h_matrix = mxCreateDoubleMatrix(nx, ny, mxREAL);
+	flux_east_matrix = mxCreateDoubleMatrix(nx,ny,mxREAL);
+	flux_north_matrix = mxCreateDoubleMatrix(nx,ny,mxREAL);
 
+	double * h_matlab_matrix;
+	h_matlab_matrix = new double[nx*ny];
+
+	//startMatlabEngine();
 	if (!(ep = engOpen(""))) {
 		fprintf(stderr, "\nCan't start MATLAB engine\n");
 		return EXIT_FAILURE;
 	}
 
-	double * h_matlab_matrix;
-	h_matlab_matrix = new double[nx*ny];
-	T = mxCreateDoubleMatrix(nx, ny, mxREAL);
-	engEvalString(ep, "cd ~/mrst-bitbucket/mrst-core;");
-    engEvalString(ep, "startup;");
-	engEvalString(ep, "startup_user;");
-	engEvalString(ep, "cd ~/mrst-bitbucket/mrst-other/co2lab;");
-	engEvalString(ep, "startuplocal");
-	engEvalString(ep, "cd ~/mrst-bitbucket/mrst-other/co2lab/guro_code;");
+	startMatlabEngine(ep);
 
 	// Cpu Pointer to store the results
 	CpuPtr_2D CheckResults(nx, ny, 0, true);
@@ -96,18 +87,12 @@ int main() {
 	CpuPtr_2D zerosWithBorder(nx+2*IC.border, ny+2*IC.border, 0, true);
 
 	//Initial Conditions
-	printf("mu_c %.7f mu_b %.7f\n", IC.mu_c, IC.mu_b);
 	IC.dz = dz;
 	IC.createnIntervalsTable(H);
 	IC.createScalingParameterTable(H);
 	IC.createInitialCoarseSatu(H, h);
 	IC.computeAllGridBlocks();
 	IC.createDtVec();
-
-	float global_time_data[3];
-	global_time_data[0] = IC.dt_test/3;
-	global_time_data[1] = t;
-	global_time_data[2] = tf;
 
 	// Create mask for sparse grid on GPU
 	std::vector<int> active_block_indexes;
@@ -130,10 +115,8 @@ int main() {
 			&flux_kernel_args, &time_int_kernel_args, &time_red_kernel_args);
 
 	h.convertToDoublePointer(h_matlab_matrix);
-	memcpy((void *)mxGetPr(T), (void *)h_matlab_matrix, sizeof(double)*nx*ny);
-	engPutVariable(ep, "T", T);
-    filename = "fluxes.mat";
-	readFluxesFromMATLABFile(filename, flux_east_2.getPtr(), flux_north_2.getPtr());
+	memcpy((void *)mxGetPr(h_matrix), (void *)h_matlab_matrix, sizeof(double)*nx*ny);
+	engPutVariable(ep, "h_matrix", h_matrix);
 
 	// Allocate and set data on the GPU
 	GpuPtr_3D perm3D_device(nx, ny, nz + 1, 0, perm3D.getPtr());
@@ -148,8 +131,8 @@ int main() {
 	GpuPtr_2D h_device(nx, ny, 0, h.getPtr());
 	GpuPtr_2D top_surface_device(nx, ny, 0, top_surface.getPtr());
 	GpuPtr_2D nInterval_device(nx, ny, 0, IC.nIntervals.getPtr());
-	GpuPtr_2D U_x_device(nx, ny, IC.border, flux_east_2.getPtr());
-	GpuPtr_2D U_y_device(nx, ny, IC.border, flux_north_2.getPtr());
+	GpuPtr_2D U_x_device(nx, ny, IC.border, flux_east.getPtr());
+	GpuPtr_2D U_y_device(nx, ny, IC.border, flux_north.getPtr());
 	GpuPtr_2D K_face_east_device(nx, ny, 0, K_face_east.getPtr());
 	GpuPtr_2D K_face_north_device(nx, ny, 0, K_face_north.getPtr());
 	GpuPtr_2D grav_east_device(nx, ny, 0, grav_east.getPtr());
@@ -163,7 +146,7 @@ int main() {
 	GpuPtr_2D vol_old_device(nx, ny, 0, zeros.getPtr());
 	GpuPtr_2D vol_new_device(nx, ny, 0, zeros.getPtr());
 	GpuPtr_2D coarse_satu_device(nx, ny, 0, IC.initial_coarse_satu_c.getPtr());
-	GpuPtr_1D global_dt_device(3, global_time_data);
+	GpuPtr_1D global_dt_device(3, IC.global_time_data);
 	GpuPtr_1D dt_vector_device(IC.nElements, IC.dt_vector);
 	GpuPtrInt_1D active_block_indexes_device(n_active_blocks,
 			&active_block_indexes[0]);
@@ -207,56 +190,62 @@ int main() {
 	setTimestepReductionKernelArgs(&time_red_kernel_args, TIME_THREADS, IC.nElements, global_dt_device.getRawPtr(),
 								   IC.cfl_scale, dt_vector_device.getRawPtr());
 
+	t = 0;
+	tf = IC.global_time_data[2];
 	int iter = 0;
 	int iter2 = 0;
 	float totTime = 0;
+	filename = "fluxes.mat";
 	//total time in years
-	float totalTime = 500;
-	while (totTime < totalTime && iter2 <50){
-		t = 0;
-		iter = 0;
-		while (t < tf && iter < 20){
-			callCoarseMobIntegrationKernel(new_sparse_grid, IC.block, IC.grid.x, &coarse_mob_int_args);
+	float totalTime = 400;
+	double time_start = getWallTime();
+	if (run){
+		while (totTime < totalTime && iter2 <100){
+			t = 0;
+			iter = 0;
+			while (t < tf && iter < 20){
+				callCoarseMobIntegrationKernel(new_sparse_grid, IC.block, IC.grid.x, &coarse_mob_int_args);
 
-			callFluxKernel(IC.grid_flux, IC.block_flux, &flux_kernel_args);
+				callFluxKernel(IC.grid_flux, IC.block_flux, &flux_kernel_args);
 
-			callTimestepReductionKernel(TIME_THREADS, &time_red_kernel_args);
+				callTimestepReductionKernel(TIME_THREADS, &time_red_kernel_args);
 
-			callTimeIntegration(IC.grid, IC.block, &time_int_kernel_args);
+				callTimeIntegration(IC.grid, IC.block, &time_int_kernel_args);
 
-			cudaMemcpy(global_time_data, global_dt_device.getRawPtr(), sizeof(float)*3, cudaMemcpyDeviceToHost);
+				cudaMemcpy(IC.global_time_data, global_dt_device.getRawPtr(), sizeof(float)*3, cudaMemcpyDeviceToHost);
 
-			//printf("Total time in years: %.3f time in this round %.3f timestep %.3f\n", totTime, t/(60*60*24), global_time_data[0]/(60*60*24));
+				//printf("Total time in years: %.3f time in this round %.3f timestep %.3f\n", totTime, t/(60*60*24), global_time_data[0]/(60*60*24));
 
-			t += global_time_data[0];
-			iter++;
+				t += IC.global_time_data[0];
+				iter++;
+			}
+			//printf("Finished Iter Total time in years: %.3f time in this round %.3f timestep %.3f\n", totTime, global_time_data[1]/(60*60*24), global_time_data[0]/(60*60*24));
+			totTime += tf/(year);
+			h_device.download(h.getPtr(), 0, 0, nx, ny);
+			h.convertToDoublePointer(h_matlab_matrix);
+			memcpy((void *)mxGetPr(h_matrix), (void *)h_matlab_matrix, sizeof(double)*nx*ny);
+			engPutVariable(ep, "h_matrix", h_matrix);
+			engEvalString(ep, "pressureFunctionToRunfromCpp(h_matrix, variables);");
+			/*engEvalString(ep, "[east_flux, north_flux] = pressureFunctionToRunfromCpp(h_matrix, variables);");
+			flux_east_matrix = engGetVariable(ep, "east_flux");
+			flux_north_matrix = engGetVariable(ep, "north_flux");
+			memcpy((void *)flux_east.getPtr(), (void *)mxGetPr(flux_east_matrix), sizeof(float)*nx*ny);
+			memcpy((void *)flux_north.getPtr(), (void *)mxGetPr(flux_north_matrix), sizeof(float)*nx*ny);
+			*/
+			readFluxesFromMATLABFile(filename, flux_east.getPtr(), flux_north.getPtr());
+			U_x_device.upload(flux_east.getPtr(), 0, 0, nx, ny);
+			U_y_device.upload(flux_north.getPtr(), 0, 0, nx, ny);
+			//printf("%s\n", cudaGetErrorString(cudaGetLastError()));
+			iter2++;
 		}
-		//printf("Finished Iter Total time in years: %.3f time in this round %.3f timestep %.3f\n", totTime, global_time_data[1]/(60*60*24), global_time_data[0]/(60*60*24));
-		totTime += tf/(60*60*24*365);
-		h_device.download(h.getPtr(), 0, 0, nx, ny);
-		h.convertToDoublePointer(h_matlab_matrix);
-		memcpy((void *)mxGetPr(T), (void *)h_matlab_matrix, sizeof(double)*nx*ny);
-		engPutVariable(ep, "T", T);
-		engEvalString(ep, "pressureFunctionToRunfromCpp(T);");
-	    filename = "fluxes.mat";
-		readFluxesFromMATLABFile(filename, flux_east_2.getPtr(), flux_north_2.getPtr());
-		U_x_device.upload(flux_east_2.getPtr(), 0, 0, nx, ny);
-		U_y_device.upload(flux_north_2.getPtr(), 0, 0, nx, ny);
-		//printf("%s\n", cudaGetErrorString(cudaGetLastError()));
-		iter2++;
 	}
-
+	printf("Elapsed time %.5f", getWallTime() - time_start);
     engClose(ep);
 
 	// Run function with timer
-	double time_start = getWallTime();
-
-	printf("Elapsed time %.5f", getWallTime() - time_start);
-
 	printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 
 	h_device.download(zeros.getPtr(), 0, 0, nx, ny);
-	zeros.printToFileComparison(Check_results_file, h);
 	zeros.printToFile(matlab_file);
 
 	float total_volume_old = computeTotalVolume(vol_old_device, nx, ny);
@@ -276,8 +265,8 @@ int main() {
 	}
 
 	printf("\nCudaMemcpy error: %s", cudaGetErrorString(cudaGetLastError()));
-	printf("\n Global timestep manual: %.2f Global timestep from Kernel: %.2f\n", mini, global_time_data[0]);
-	printf("dt from MATLAB: %.3f global_dt from kernel: %.3f\n", dt/(60*60*24), global_time_data[0]/(60*60*24));
+	printf("\n Global timestep manual: %.2f Global timestep from Kernel: %.2f\n", mini, IC.global_time_data[0]);
+	printf("dt from MATLAB: %.3f global_dt from kernel: %.3f\n", dt/(60*60*24), IC.global_time_data[0]/(60*60*24));
 	printf("FINITO");
 
 	//printf("Check results %.3f", CheckResults(6,0));

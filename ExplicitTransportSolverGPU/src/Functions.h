@@ -9,9 +9,11 @@
 #include <iostream>
 #include "matio.h"
 #include "GpuPtr.h"
+#include "engine.h"
 using namespace std;
 
 void print_properties();
+void startMatlabEngine(Engine* ep);
 float maximum(int n, float* array);
 float computeTotalVolume(GpuPtr_2D vol_device, int nx, int ny);
 void printArray(int n, float* array);

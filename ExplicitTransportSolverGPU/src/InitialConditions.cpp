@@ -8,6 +8,10 @@ InitialConditions::InitialConditions(int nx, int ny, float dz){
 
 	this->cfl_scale = 0.5*0.25;
 	this->dt_test = 4.3711 * pow((float)10, 7);
+	this->global_time_data[0] = dt_test/3;
+	this->global_time_data[1] = 0;
+	//tf
+	this->global_time_data[2] = 157680000;
 
 	this->integral_res = 0.1f;
 	// Density difference between brine and CO2

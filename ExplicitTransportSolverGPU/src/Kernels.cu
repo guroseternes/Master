@@ -61,7 +61,7 @@ inline __device__ float computeFluxEast(float (&U)[BLOCKDIM_X][SM_BLOCKDIM_Y],
 									   float (&z)[BLOCKDIM_X][SM_BLOCKDIM_Y],
 									   float(&normal_z)[BLOCKDIM_X][SM_BLOCKDIM_Y],
 									   float K_face, float g_vec, float pv, float H,
-									   unsigned int i, unsigned int j){
+									   unsigned int i, unsigned int j, float &upwindThis){
 	float face_mob_c, face_mob_b, dface_mob_c, dface_mob_b, tot_mob, F_c;
 	float U_b, U_c;
 	float h_diff, z_diff, b, g_flux;
@@ -71,12 +71,14 @@ inline __device__ float computeFluxEast(float (&U)[BLOCKDIM_X][SM_BLOCKDIM_Y],
 	z_diff = z[i][j]-z[i+1][j];
 	b = z_diff + h_diff;
 	g_flux = -g_vec*b*delta_rho*K_face*H;
+	//upwindThis = g_flux;
 
 	// Determine the upwind cell evaluation for the two phases
 	if (g_flux*U[i][j] >= 0) {
-		if (U[i] > 0){
+		if (U[i][j] > 0){
 			face_mob_c = lambda_c[i][j];
 			dface_mob_c = dlambda_c[i][j];
+			upwindThis = U[i][j];
 		} else {
 			face_mob_c = lambda_c[i+1][j];
 			dface_mob_c = dlambda_c[i+1][j];
@@ -89,7 +91,7 @@ inline __device__ float computeFluxEast(float (&U)[BLOCKDIM_X][SM_BLOCKDIM_Y],
 			dface_mob_b = dlambda_b[i+1][j];
 		}
 	} else {
-		if (U[i] > 0) {
+		if (U[i][j] > 0) {
 			face_mob_b = lambda_b[i][j];
 			dface_mob_b = dlambda_b[i][j];
 		} else {
@@ -99,6 +101,7 @@ inline __device__ float computeFluxEast(float (&U)[BLOCKDIM_X][SM_BLOCKDIM_Y],
 		if (U[i][j] + face_mob_b*g_flux > 0) {
 			face_mob_c = lambda_c[i][j];
 			dface_mob_c = dlambda_c[i][j];
+			upwindThis = 2;
 		} else {
 			face_mob_c = lambda_c[i+1][j];
 			dface_mob_c = dlambda_c[i+1][j];
@@ -121,6 +124,7 @@ inline __device__ float computeFluxEast(float (&U)[BLOCKDIM_X][SM_BLOCKDIM_Y],
 		dt_temp = pv/ff;
 	// Reuse of memory
 	U[i][j] =  U_c;
+	pv = upwindThis;
 	return dt_temp;
 }
 
@@ -146,7 +150,7 @@ inline __device__ float computeFluxNorth(float (&U)[BLOCKDIM_X][SM_BLOCKDIM_Y],
 
 	// Determine the upwind cell evaluation for the two phases
 	if (g_flux*U[i][j] >= 0) {
-		if (U[i] > 0){
+		if (U[i][j] > 0){
 			face_mob_c = lambda_c[i][j];
 			dface_mob_c = dlambda_c[i][j];
 		} else {
@@ -161,7 +165,7 @@ inline __device__ float computeFluxNorth(float (&U)[BLOCKDIM_X][SM_BLOCKDIM_Y],
 			dface_mob_b = dlambda_b[i][j+1];
 		}
 	} else {
-		if (U[i] > 0) {
+		if (U[i][j] > 0) {
 			face_mob_b = lambda_b[i][j];
 			dface_mob_b = dlambda_b[i][j];
 		} else {
@@ -253,15 +257,13 @@ __global__ void FluxKernel(){
     float K_face_north = global_index(fk_ctx.K_face_north.ptr, fk_ctx.K_face_north.pitch, new_xid, new_yid, noborder)[0];
     float pv = global_index(common_ctx.pv.ptr, common_ctx.pv.pitch, new_xid, new_yid, noborder)[0];
     float H = global_index(common_ctx.H.ptr, common_ctx.H.pitch, new_xid, new_yid, noborder)[0];
+    float upwindThis = 1;
 
-    __syncthreads();
-    global_index(fk_ctx.U_x.ptr, fk_ctx.U_x.pitch, xid, yid, border)[0] = 0;
-    global_index(fk_ctx.U_y.ptr, fk_ctx.U_y.pitch, xid, yid, border)[0] = 0;
     __syncthreads();
 
     if (i < (TILEDIM_X+1) && j < (TILEDIM_Y+1)) {
     	dt_local = computeFluxEast(U_local_x, lambda_c_local, lambda_b_local,
-    			dlambda_c_local, dlambda_b_local, h_local, z_local, normal_z_local, K_face_east, g_vec_east, pv,H, i, j);
+    			dlambda_c_local, dlambda_b_local, h_local, z_local, normal_z_local, K_face_east, g_vec_east, pv,H, i, j, upwindThis);
     	dt_local = fminf(dt_local, computeFluxNorth(U_local_y, lambda_c_local, lambda_b_local,
     			dlambda_c_local, dlambda_b_local, h_local, z_local, normal_z_local, K_face_north ,g_vec_north, pv,H, i, j));
     	if (global_index(common_ctx.H.ptr, common_ctx.H.pitch, new_xid, new_yid, noborder)[0] == 0) {
@@ -273,16 +275,17 @@ __global__ void FluxKernel(){
     		dt_local = default_;
     		U_local_x[i][j] = 0;
     		U_local_y[i][j] = 0;
+    		//global_index(fk_ctx.test_output.ptr, fk_ctx.test_output.pitch , new_xid, new_yid, noborder)[0] = 1;
     	}
     	if (active_east == -1){
     		U_local_x[i][j] = 0;
+    		//global_index(fk_ctx.test_output.ptr, fk_ctx.test_output.pitch , new_xid, new_yid, noborder)[0] = 1;
     		dt_local = default_;
     	}
     	if (active_north == -1){
     	    U_local_y[i][j] = 0;
     	    dt_local = default_;
     	}
-    	global_index(fk_ctx.test_output.ptr, fk_ctx.test_output.pitch , new_xid, new_yid, noborder)[0] = U_local_y[i][j];
     }
 
 
@@ -290,11 +293,11 @@ __global__ void FluxKernel(){
 
     __syncthreads();
 
-    if (new_xid > -1 && new_xid < common_ctx.nx && new_yid > -1 && new_yid < common_ctx.ny){
+    if (xid > -1 && xid < common_ctx.nx && yid > -1 && yid < common_ctx.ny){
         if (i < TILEDIM_X+1 && i > 0 && j < TILEDIM_Y+1 && j > 0) {
 				float r = (U_local_x[i][j] - U_local_x[i-1][j])+(U_local_y[i][j] - U_local_y[i][j-1]);
-				if (abs(r) < 1000)
-					global_index(fk_ctx.R.ptr, fk_ctx.R.pitch, new_xid, new_yid, noborder)[0] = r;
+				global_index(fk_ctx.test_output.ptr, fk_ctx.test_output.pitch , new_xid, new_yid, noborder)[0] = upwindThis;
+				global_index(fk_ctx.R.ptr, fk_ctx.R.pitch, new_xid, new_yid, noborder)[0] = r;
 				timeStep[i][j] = dt_local;
         }
     }
@@ -490,7 +493,7 @@ __global__ void TimeIntegrationKernel(){
 
 }
 
-void callTimeIntegration(dim3 grid, dim3 block, TimeIntegrationKernelArgs* args){
+void callTimeIntegration(dim3 grid, dim3 block, int gridDimX, TimeIntegrationKernelArgs* args){
 	cudaMemcpyToSymbolAsync(tik_ctx, args, sizeof(TimeIntegrationKernelArgs), 0, cudaMemcpyHostToDevice);
 	TimeIntegrationKernel<<<grid, block>>>();
 }

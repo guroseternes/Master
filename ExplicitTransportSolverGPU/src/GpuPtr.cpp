@@ -18,7 +18,6 @@ GpuPtr_3D::GpuPtr_3D(unsigned int nx, unsigned int ny, unsigned int nz, int bord
 	data.ptr = 0;
 	data.pitch = 0;
 	cudaMalloc3D(&data, extent);
-	printf("Malloc 3D %s\n", cudaGetErrorString(cudaGetLastError()));
 	if (cpu_ptr != NULL) upload(cpu_ptr, nx, ny, nz);
 }
 
@@ -45,7 +44,6 @@ void GpuPtr_3D::upload(float* cpu_ptr, unsigned int nx, unsigned int ny, unsigne
 
 	printf("nz in upload %i\n", nz);
 	cudaMemcpy3D(&params);
-	printf("Error upload %s\n", cudaGetErrorString(cudaGetLastError()));
 }
 
 

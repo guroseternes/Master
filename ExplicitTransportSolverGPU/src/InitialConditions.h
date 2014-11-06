@@ -30,6 +30,7 @@ public:
 
 	float cfl_scale;
 	float dt_test;
+	float global_time_data[3];
 
 	float delta_rho;
 	float g;

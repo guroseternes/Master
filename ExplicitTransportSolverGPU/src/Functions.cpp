@@ -21,6 +21,16 @@ void print_properties(){
         printf("\n\n");
 }
 
+void startMatlabEngine(Engine* ep){
+	engEvalString(ep, "cd ~/mrst-bitbucket/mrst-core;");
+	engEvalString(ep, "startup;");
+	engEvalString(ep, "startup_user;");
+	engEvalString(ep, "cd ~/mrst-bitbucket/mrst-other/co2lab;");
+	engEvalString(ep, "startuplocal");
+	engEvalString(ep, "cd ~/mrst-bitbucket/mrst-other/co2lab/guro_code;");
+	engEvalString(ep, "variables = loadDataForCpp;");
+}
+
 float maximum(int n, float* array){
 	float max = 0;
 	for (int i = 0; i < n; i++){
