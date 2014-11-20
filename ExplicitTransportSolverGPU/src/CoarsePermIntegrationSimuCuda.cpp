@@ -211,7 +211,7 @@ int main() {
 	callCoarseMobIntegrationKernel(new_sparse_grid, IC.block, IC.grid.x, &coarse_mob_int_args);
 	callFluxKernel(IC.grid_flux, IC.block_flux, &flux_kernel_args);
 	callTimeIntegration(new_sparse_grid, IC.block, IC.grid.x, &time_int_kernel_args);
-	vol_old_device.download(volume.getPtr(), 0, 0, nx, ny);
+	vol_new_device.download(volume.getPtr(), 0, 0, nx, ny);
 	float total_volume_old = computeTotalVolume(volume, nx, ny);
 	total_volume_old = stop_inject*0.162037037037037*year;
 	float injection_rate = 0.162037037037037;
@@ -223,12 +223,13 @@ int main() {
 	float totTime = 0;
 	float injected = 0;
 	//total time in years
-	float totalTime = 24;
+	float totalTime = 500;
+	float temp_time_data[3];
 	double time_start = getWallTime();
 	double time_start_iter;
 	double total_time_gpu = 0;
 	if (run){
-		while (totTime < totalTime && iter2 < 400){
+		while (totTime < totalTime && iter2 < 500){
 			t = 0;
 			iter = 0;
 
@@ -259,16 +260,22 @@ int main() {
 			U_x_device.upload(flux_east.getPtr(), 0, 0, nx+2*IC.border, ny+2*IC.border);
 			U_y_device.upload(flux_north.getPtr(), 0, 0,nx+2*IC.border, ny+2*IC.border);
 			time_start_iter = getWallTime();
-			while (t < tf && iter < 500){
+			while (t < tf && iter < 400){
 				callCoarseMobIntegrationKernel(new_sparse_grid, IC.block, IC.grid.x, &coarse_mob_int_args);
 
 				callFluxKernel(IC.grid_flux, IC.block_flux, &flux_kernel_args);
 
 				callTimestepReductionKernel(TIME_THREADS, &time_red_kernel_args);
 
+				if (iter <2 && iter2 == 0){
+					IC.global_time_data[0] = 157680000/20;
+					IC.global_time_data[1] += 157680000/20;
+					cudaMemcpy(global_dt_device.getRawPtr(), IC.global_time_data, sizeof(float)*3, cudaMemcpyHostToDevice);
+				}
 				callTimeIntegration(new_sparse_grid, IC.block, IC.grid.x, &time_int_kernel_args);
 
 				cudaMemcpy(IC.global_time_data, global_dt_device.getRawPtr(), sizeof(float)*3, cudaMemcpyDeviceToHost);
+
 
 				injected += IC.global_time_data[0]*source(50,50);
 
@@ -295,11 +302,11 @@ int main() {
 
 	h_device.download(zeros.getPtr(), 0, 0, nx, ny);
 	zeros.printToFile(matlab_file);
-	output_test_device.download(zeros.getPtr(), 0, 0, nx, ny);
+	vol_new_device.download(zeros.getPtr(), 0, 0, nx, ny);
 	zeros.printToFile(matlab_file_2);
 	printf("Load error: %s\n", cudaGetErrorString(cudaGetLastError()));
 
-	vol_old_device.download(zeros.getPtr(), 0, 0, nx, ny);
+	vol_new_device.download(zeros.getPtr(), 0, 0, nx, ny);
 	float total_volume_new = computeTotalVolume(zeros, nx, ny);
 
 	printf("total volume new %.2f total volume old %.2f frac: %.10f injected %.1f injected fraction %.10f",

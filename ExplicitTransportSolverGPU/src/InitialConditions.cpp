@@ -6,7 +6,7 @@ InitialConditions::InitialConditions(int nx, int ny, float dz){
 	this->dz = dz;
 	this->border = 1;
 
-	this->cfl_scale = 0.5*0.1*0.2;
+	this->cfl_scale = 0.5*0.2;
 	this->dt_test = 4.3711 * pow((float)10, 7);
 	this->global_time_data[0] = 0;
 	this->global_time_data[1] = 0;
@@ -28,9 +28,9 @@ InitialConditions::InitialConditions(int nx, int ny, float dz){
 	//Residual saturation values
 	this->s_b_res = 0.1;
 	this->s_c_res = 0.2;
-	this->lambda_end_point_c = 1;
+	this->lambda_end_point_c = 0.2142;
 	float temp = (1-s_c_res-s_b_res)/(1-s_b_res);
-	this->lambda_end_point_b = 1/pow(temp,3);
+	this->lambda_end_point_b = 0.85;//1/pow(temp,3);
 
 	// Table of capillary pressure values for our subintervals along the z-axis ranging from 0 to h
 	this->resolution = 0.01;
@@ -74,7 +74,7 @@ void InitialConditions::createScalingParameterTable(CpuPtr_2D H){
 	scaling_parameter = CpuPtr_2D(nx,ny,0,true);
 	for (int j = 0; j < ny; j++){
 		for (int i = 0; i < nx; i++){
-			scaling_parameter(i,j) = 0.1*(-g)*delta_rho*H(i,j);
+			scaling_parameter(i,j) = 0.001*(-g)*delta_rho*H(i,j);
 		}
 	}
 }
