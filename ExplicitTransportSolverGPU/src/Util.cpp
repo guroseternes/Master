@@ -111,7 +111,7 @@ void setCoarseMobIntegrationKernelArgs(CoarseMobIntegrationKernelArgs* args,
 void setFluxKernelArgs(FluxKernelArgs* args,
 					   GpuRawPtr Lambda_c, GpuRawPtr Lambda_b,
 					   GpuRawPtr dLambda_c, GpuRawPtr dLambda_b,
-					   GpuRawPtr U_x, GpuRawPtr U_y,
+					   GpuRawPtr U_x, GpuRawPtr U_y, GpuRawPtr source,
 					   GpuRawPtr h, GpuRawPtr z, GpuRawPtr normal_z,
 					   GpuRawPtr K_face_east, GpuRawPtr K_face_north,
 					   GpuRawPtr g_vec_east, GpuRawPtr g_vec_north,
@@ -123,6 +123,7 @@ void setFluxKernelArgs(FluxKernelArgs* args,
 	args->test_output = test_output;
 	args->U_x = U_x;
 	args->U_y = U_y;
+	args->source = source;
 	args->h = h;
 	args->z = z;
 	args->normal_z = normal_z;

@@ -116,8 +116,27 @@ size = nx*ny;
 memcpy(north_flux, matvar->data,sizeof(float)*size);
 Mat_VarFree(matvar);
 matvar = NULL;
-
 }
+
+void readSourceFromMATLABFile(const char* filename, float* source) {
+
+mat_t *matfp;
+matvar_t *matvar;
+matfp = Mat_Open(filename, MAT_ACC_RDONLY);
+if ( NULL == matfp ) {
+	fprintf(stderr,"Error opening MAT file");
+}
+int nx, ny;
+matvar = Mat_VarReadNextInfo(matfp);
+Mat_VarReadDataAll(matfp, matvar);
+nx = matvar->dims[0];
+ny = matvar->dims[1];
+int size = nx*ny;
+memcpy(source, matvar->data,sizeof(float)*size);
+Mat_VarFree(matvar);
+matvar = NULL;
+}
+
 
 void readActiveCellsFromMATLABFile(const char* filename, float* active_east, float* active_north) {
 

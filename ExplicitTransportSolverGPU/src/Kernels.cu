@@ -35,8 +35,11 @@ __device__ float computeBrineSaturation(float p_cap, float C){
 	return fmaxf(C*C/((C+p_cap)*(C+p_cap)), common_ctx.s_b_res);
 }
 
-__device__ float computeRelPerm(float s_c, float lambda_end_point){
-		return (pow(s_c, 3)*lambda_end_point);
+__device__ float computeRelPermBrine(float s_e, float lambda_end_point_b){
+		return (pow(s_e, 3)*lambda_end_point_b);
+}
+__device__ float computeRelPermCarbon(float s_e, float lambda_end_point_c){
+		return (pow(1-s_e, 3)*lambda_end_point_c);
 }
 
 __device__ float trapezoidal(float H, float dz, int n, float* function_values){
@@ -78,7 +81,7 @@ inline __device__ float computeFluxEast(float (&U)[BLOCKDIM_X_FLUX][SM_BLOCKDIM_
 		if (U[i][j] > 0){
 			face_mob_c = lambda_c[i][j];
 			dface_mob_c = dlambda_c[i][j];
-			upwindThis = U[i][j];
+			//upwindThis = 0;
 		} else {
 			face_mob_c = lambda_c[i+1][j];
 			dface_mob_c = dlambda_c[i+1][j];
@@ -101,7 +104,7 @@ inline __device__ float computeFluxEast(float (&U)[BLOCKDIM_X_FLUX][SM_BLOCKDIM_
 		if (U[i][j] + face_mob_b*g_flux > 0) {
 			face_mob_c = lambda_c[i][j];
 			dface_mob_c = dlambda_c[i][j];
-			upwindThis = 2;
+			//upwindThis = 2;
 		} else {
 			face_mob_c = lambda_c[i+1][j];
 			dface_mob_c = dlambda_c[i+1][j];
@@ -109,8 +112,8 @@ inline __device__ float computeFluxEast(float (&U)[BLOCKDIM_X_FLUX][SM_BLOCKDIM_
 	}
 
 	tot_mob = face_mob_c + face_mob_b;
-	if (face_mob_c == 0)
-		face_mob_c = 0.00000000001;
+	//if (face_mob_c == 0)
+	//	face_mob_c = 0.00000000001;
 	if (tot_mob != 0) {
 		F_c = face_mob_c/tot_mob;
 		U_c = F_c*(U[i][j]+face_mob_b*g_flux);
@@ -120,11 +123,11 @@ inline __device__ float computeFluxEast(float (&U)[BLOCKDIM_X_FLUX][SM_BLOCKDIM_
 		     (g_vec*delta_rho*K_face*face_mob_b*F_c*H);
 	}
 	float dt_temp = FLT_MAX;
-	if (ff > 1*pow(10.0, -15) && pv != 0)
+	if (pv != 0)
 		dt_temp = pv/ff;
 	// Reuse of memory
 	U[i][j] =  U_c;
-	pv = upwindThis;
+	upwindThis = face_mob_b;
 	return dt_temp;
 }
 
@@ -181,8 +184,8 @@ inline __device__ float computeFluxNorth(float (&U)[BLOCKDIM_X_FLUX][SM_BLOCKDIM
 		}
 	}
 	tot_mob = face_mob_c + face_mob_b;
-	if (face_mob_c == 0)
-		face_mob_c = 0.0000000001;
+	//if (face_mob_c == 0)
+		//face_mob_c = 0.0000000001;
 	if (tot_mob != 0) {
 		F_c = face_mob_c/tot_mob;
 		U_c = F_c*(U[i][j]+face_mob_b*g_flux);
@@ -192,7 +195,7 @@ inline __device__ float computeFluxNorth(float (&U)[BLOCKDIM_X_FLUX][SM_BLOCKDIM
 		     (g_vec*delta_rho*K_face*face_mob_b*F_c*H);
 	}
 	float dt_temp = FLT_MAX;
-	if (ff > 1*pow(10.0, -15) && pv != 0)
+	if (pv != 0)
 		dt_temp = pv/ff;
 	// Reuse of memory
 	U[i][j] = U_c;
@@ -244,10 +247,12 @@ __global__ void FluxKernel(){
 
     U_local_x[i][j] = global_index(fk_ctx.U_x.ptr, fk_ctx.U_x.pitch, xid, yid, border)[0];
     U_local_y[i][j] = global_index(fk_ctx.U_y.ptr, fk_ctx.U_y.pitch, xid, yid, border)[0];
-    lambda_c_local[i][j] = global_index(fk_ctx.Lambda_c.ptr, fk_ctx.Lambda_c.pitch, new_xid, new_yid, noborder)[0];
-    lambda_b_local[i][j] = global_index(fk_ctx.Lambda_b.ptr, fk_ctx.Lambda_b.pitch, new_xid, new_yid, noborder)[0];
-    dlambda_c_local[i][j] = global_index(fk_ctx.dLambda_c.ptr, fk_ctx.Lambda_c.pitch, new_xid, new_yid, noborder)[0];
-    dlambda_b_local[i][j] = global_index(fk_ctx.dLambda_b.ptr, fk_ctx.Lambda_b.pitch, new_xid, new_yid, noborder)[0];
+    float lambda_c = global_index(fk_ctx.Lambda_c.ptr, fk_ctx.Lambda_c.pitch, new_xid, new_yid, noborder)[0];
+    lambda_c_local[i][j] = lambda_c;
+    float lambda_b = global_index(fk_ctx.Lambda_b.ptr, fk_ctx.Lambda_b.pitch, new_xid, new_yid, noborder)[0];
+    lambda_b_local[i][j] = lambda_b;
+    dlambda_c_local[i][j] = global_index(fk_ctx.dLambda_c.ptr, fk_ctx.dLambda_c.pitch, new_xid, new_yid, noborder)[0];
+    dlambda_b_local[i][j] = global_index(fk_ctx.dLambda_b.ptr, fk_ctx.dLambda_b.pitch, new_xid, new_yid, noborder)[0];
     h_local[i][j] = global_index(fk_ctx.h.ptr, fk_ctx.h.pitch, new_xid, new_yid, noborder)[0];
     z_local[i][j] = global_index(fk_ctx.z.ptr, fk_ctx.z.pitch, new_xid, new_yid, noborder)[0];
     normal_z_local[i][j] = global_index(fk_ctx.normal_z.ptr, fk_ctx.normal_z.pitch, new_xid, new_yid, noborder)[0];
@@ -280,11 +285,11 @@ __global__ void FluxKernel(){
     	if (active_east == -1){
     		U_local_x[i][j] = 0;
     		//global_index(fk_ctx.test_output.ptr, fk_ctx.test_output.pitch , new_xid, new_yid, noborder)[0] = 1;
-    		dt_local = default_;
+    		//dt_local = default_;
     	}
     	if (active_north == -1){
     	    U_local_y[i][j] = 0;
-    	    dt_local = default_;
+    	    //dt_local = default_;
     	}
     }
 
@@ -296,7 +301,11 @@ __global__ void FluxKernel(){
     if (xid > -1 && xid < common_ctx.nx && yid > -1 && yid < common_ctx.ny){
         if (i < TILEDIM_X+1 && i > 0 && j < TILEDIM_Y+1 && j > 0) {
 				float r = (U_local_x[i][j] - U_local_x[i-1][j])+(U_local_y[i][j] - U_local_y[i][j-1]);
+
+				float source = global_index(fk_ctx.source.ptr, fk_ctx.source.pitch , new_xid, new_yid, noborder)[0];
+				float F_c = lambda_c/(lambda_c+lambda_b);
 				global_index(fk_ctx.test_output.ptr, fk_ctx.test_output.pitch , new_xid, new_yid, noborder)[0] = upwindThis;
+				r = r -fmaxf(source, 0) - fminf(source, 0)*F_c;
 				global_index(fk_ctx.R.ptr, fk_ctx.R.pitch, new_xid, new_yid, noborder)[0] = r;
 				timeStep[i][j] = dt_local;
         }
@@ -361,128 +370,128 @@ void callFluxKernel(dim3 grid, dim3 block, FluxKernelArgs* args){
 	FluxKernel<<<grid, block>>>();
 }
 
+inline __device__ float computeSatu(float z, float C){
+	float curr_p_cap = common_ctx.p_ci + common_ctx.g*common_ctx.delta_rho*(-z);
+	return 1-computeBrineSaturation(curr_p_cap, C);
+}
 
-inline __device__ float solveForh(float S_c_new, float H, float h, float p_ci, float dz, float delta_rho, float g, float C){
+inline __device__ void higherResolutionIteration(float& z, float& sum, float C, float& prev_s_c, float& curr_s_c, float& dz, float S_c_new){
+	z -= dz;
+	int i = 0;
+	sum -= 0.5*dz*(curr_s_c + prev_s_c);
+	curr_s_c = prev_s_c;
+	dz = dz/10;
+	while (sum < S_c_new && i <10){
+		prev_s_c = curr_s_c;
+		z += dz;
+		curr_s_c = computeSatu(z, C);
+		sum += 0.5*dz*(curr_s_c + prev_s_c);
+		i++;
+	}
+}
+
+inline __device__ void higherResolutionIterationWithShift(float& z, float& z_bottom, float& sum, float C, float& prev_s_c, float& curr_s_c,
+														   float& prev_s_c_bottom, float& curr_s_c_bottom, float& dz, float S_c_new){
+	z -= dz;
+	z_bottom -= dz;
+	int i = 0;
+	sum -= 0.5*dz*(curr_s_c + prev_s_c);
+	sum += 0.5*dz*(curr_s_c_bottom + prev_s_c_bottom);
+	curr_s_c = prev_s_c;
+	curr_s_c_bottom = prev_s_c_bottom;
+	dz = dz/10;
+	while (sum < S_c_new && i <10){
+		prev_s_c = curr_s_c;
+		prev_s_c_bottom = curr_s_c_bottom;
+		z += dz;
+		z_bottom += dz;
+		curr_s_c = computeSatu(z, C);
+		curr_s_c_bottom = computeSatu(z_bottom, C);
+		sum += 0.5*dz*(curr_s_c + prev_s_c);
+		sum -= 0.5*dz*(curr_s_c_bottom + prev_s_c_bottom);
+		i++;
+	}
+}
+
+inline __device__ float solveForh(float S_c_new, float H, float h, float p_ci, float dz, float delta_rho, float g, float C, bool print){
+	float eps = dz/(10*10*10*10*10*10*10*10*10); // 7 times
 	float sum = 0;
 	float z = 0;
-	float curr_p_cap = p_ci + g*delta_rho*(-z);
-	float curr_s_c = 1-computeBrineSaturation(curr_p_cap, C);
+	float curr_s_c = computeSatu(z, C);
 	float prev_s_c = 0;
-	bool corr_h =  false;
-	/*
-	if (h<1.127 && h >1.126){
-		printf("h %.5f curr_s_c: %f S_c_new: %f\n", h, curr_s_c, S_c_new);
-		corr_h = true;
-	}
-	*/
+	float z_bottom = 0;
+	float curr_s_c_bottom = computeSatu(z, C);
+	float prev_s_c_bottom = 0;
+	float overflow;
 	int i = 0;
-	if (H > 0.0001 && 0 < S_c_new ){
-	while (sum < S_c_new && i <200){
-		prev_s_c = curr_s_c;
-		z += dz;
-		curr_p_cap = p_ci + g*delta_rho*(-z);
-		curr_s_c = 1-computeBrineSaturation(curr_p_cap, C);
-		sum += 0.5*dz*(curr_s_c + prev_s_c);
-		i++;
+	if (H > eps && eps < S_c_new ){
+		while (sum < S_c_new && i <200 && z <= H){
+			prev_s_c = curr_s_c;
+			z += dz;
+			curr_s_c = computeSatu(z, C);
+			sum += 0.5*dz*(curr_s_c + prev_s_c);
+			i++;
+		}
+		if (while z < H) {
+			higherResolutionIteration(z, sum, C, prev_s_c, curr_s_c, dz, S_c_new);
+			higherResolutionIteration(z, sum, C, prev_s_c, curr_s_c, dz, S_c_new);
+			higherResolutionIteration(z, sum, C, prev_s_c, curr_s_c, dz, S_c_new);
+			higherResolutionIteration(z, sum, C, prev_s_c, curr_s_c, dz, S_c_new);
+			higherResolutionIteration(z, sum, C, prev_s_c, curr_s_c, dz, S_c_new);
+			higherResolutionIteration(z, sum, C, prev_s_c, curr_s_c, dz, S_c_new);
+			higherResolutionIteration(z, sum, C, prev_s_c, curr_s_c, dz, S_c_new);
+			higherResolutionIteration(z, sum, C, prev_s_c, curr_s_c, dz, S_c_new);
+			higherResolutionIteration(z, sum, C, prev_s_c, curr_s_c, dz, S_c_new);
+			higherResolutionIteration(z, sum, C, prev_s_c, curr_s_c, dz, S_c_new);
+		} else {
+			float z_bottom = 0;
+			float curr_s_c_bottom = computeSatu(z, C);
+			float prev_s_c_bottom = 0;
+			printf("sum5: %.5f z5: %.5f S_c_new %.5f\n", sum, z, S_c_new/H);
+			while (sum < S_c_new && i < 100){
+				prev_s_c = curr_s_c;
+				prev_s_c_bottom = curr_s_c_bottom;
+				z += dz;
+				z_bottom += dz;
+				curr_s_c = computeSatu(z, C);
+				curr_s_c_bottom = computeSatu(z_bottom, C);
+				sum += 0.5*dz*(curr_s_c + prev_s_c);
+				sum -= 0.5*dz*(curr_s_c_bottom + prev_s_c_bottom);
+				i++;
+			}
+			higherResolutionIterationWithShift(z, z_bottom, sum, C, prev_s_c, curr_s_c,
+											   prev_s_c_bottom, curr_s_c_bottom, dz, S_c_new);
+			higherResolutionIterationWithShift(z, z_bottom, sum, C, prev_s_c, curr_s_c,
+											   prev_s_c_bottom, curr_s_c_bottom, dz, S_c_new);
+			higherResolutionIterationWithShift(z, z_bottom, sum, C, prev_s_c, curr_s_c,
+											   prev_s_c_bottom, curr_s_c_bottom, dz, S_c_new);
+			higherResolutionIterationWithShift(z, z_bottom, sum, C, prev_s_c, curr_s_c,
+											   prev_s_c_bottom, curr_s_c_bottom, dz, S_c_new);
+			higherResolutionIterationWithShift(z, z_bottom, sum, C, prev_s_c, curr_s_c,
+											   prev_s_c_bottom, curr_s_c_bottom, dz, S_c_new);
+			higherResolutionIterationWithShift(z, z_bottom, sum, C, prev_s_c, curr_s_c,
+											   prev_s_c_bottom, curr_s_c_bottom, dz, S_c_new);
+			higherResolutionIterationWithShift(z, z_bottom, sum, C, prev_s_c, curr_s_c,
+											   prev_s_c_bottom, curr_s_c_bottom, dz, S_c_new);
+			higherResolutionIterationWithShift(z, z_bottom, sum, C, prev_s_c, curr_s_c,
+											   prev_s_c_bottom, curr_s_c_bottom, dz, S_c_new);
+			printf("sum5: %.5f z5: %.5f S_c_new %.5f\n", sum, z, S_c_new/H);
+		}
+
+
 	}
-	//if (corr_h)
-		//printf("sum1: %.5f z1: %.5f\n", sum, z);
-	// For the last integration step we make a more exact approximation
-	z -= dz;
-	i = 0;
-	sum -= 0.5*dz*(curr_s_c + prev_s_c);
-	dz = dz/10;
-	curr_s_c = prev_s_c;
-	while (sum < S_c_new && i <10){
-		prev_s_c = curr_s_c;
-		z += dz;
-		curr_p_cap = p_ci + g*delta_rho*(-z);
-		curr_s_c = 1-computeBrineSaturation(curr_p_cap, C);
-		sum += 0.5*dz*(curr_s_c + prev_s_c);
-		i++;
-	}
-//	if (corr_h)
-	//	printf("sum2: %.5f z2: %.5f\n", sum, z);
-	z -= dz;
-	i = 0;
-	sum -= 0.5*dz*(curr_s_c + prev_s_c);
-	dz = dz/10;
-	curr_s_c = prev_s_c;
-	while (sum < S_c_new && i <10){
-		prev_s_c = curr_s_c;
-		z += dz;
-		curr_p_cap = p_ci + g*delta_rho*(-z);
-		curr_s_c = 1-computeBrineSaturation(curr_p_cap, C);
-		sum += 0.5*dz*(curr_s_c + prev_s_c);
-		i++;
-	}
-//	if (corr_h)
-	//	printf("sum3: %.5f z3: %.5f\n", sum, z);
-	z -= dz;
-	i = 0;
-	sum -= 0.5*dz*(curr_s_c + prev_s_c);
-	dz = dz/10;
-	curr_s_c = prev_s_c;
-	while (sum < S_c_new && i <10){
-		prev_s_c = curr_s_c;
-		z += dz;
-		curr_p_cap = p_ci + g*delta_rho*(-z);
-		curr_s_c = 1-computeBrineSaturation(curr_p_cap, C);
-		//if (corr_h)
-			//printf("sum4: %.5f z4: %.5f\n", sum, z);
-		sum += 0.5*dz*(curr_s_c + prev_s_c);
-		i++;
-	}
-	z -= dz;
-	i = 0;
-	sum -= 0.5*dz*(curr_s_c + prev_s_c);
-	dz = dz/10;
-	curr_s_c = prev_s_c;
-	while (sum < S_c_new && i <10){
-		prev_s_c = curr_s_c;
-		z += dz;
-		curr_p_cap = p_ci + g*delta_rho*(-z);
-		curr_s_c = 1-computeBrineSaturation(curr_p_cap, C);
-		//if (corr_h)
-			//printf("sum5: %.5f z5: %.5f\n", sum, z);
-		sum += 0.5*dz*(curr_s_c + prev_s_c);
-		i++;
-	}
-	z -= dz;
-	i = 0;
-	sum -= 0.5*dz*(curr_s_c + prev_s_c);
-	dz = dz/10;
-	curr_s_c = prev_s_c;
-	while (sum < S_c_new && i <10){
-		prev_s_c = curr_s_c;
-		z += dz;
-		curr_p_cap = p_ci + g*delta_rho*(-z);
-		curr_s_c = 1-computeBrineSaturation(curr_p_cap, C);
-		//if (corr_h)
-			//printf("sum5: %.5f z5: %.5f\n", sum, z);
-		sum += 0.5*dz*(curr_s_c + prev_s_c);
-		i++;
-	}
-	z -= dz;
-	i = 0;
-	sum -= 0.5*dz*(curr_s_c + prev_s_c);
-	dz = dz/10;
-	curr_s_c = prev_s_c;
-	while (sum < S_c_new && i <10){
-		prev_s_c = curr_s_c;
-		z += dz;
-		curr_p_cap = p_ci + g*delta_rho*(-z);
-		curr_s_c = 1-computeBrineSaturation(curr_p_cap, C);
-		//if (corr_h)
-			//printf("sum5: %.5f z5: %.5f\n", sum, z);
-		sum += 0.5*dz*(curr_s_c + prev_s_c);
-		i++;
-	}
-	}
-	//if (corr_h)
+	//if (print)
 		//printf("sum5: %.5f z5: %.5f\n", sum, z);
-	if (z > 0)
-		return z;
+	if (z > 0){
+		/*if (z>=H){
+			//printf("Height Warn");
+			return H;
+		}
+
+		else
+		*/
+			return z;
+	}
 	else
 		return 0;
 
@@ -501,7 +510,9 @@ __global__ void TimeIntegrationKernel(int gridDimX){
 
     float H = global_index(common_ctx.H.ptr, common_ctx.H.pitch, xid, yid, noborder)[0];
     float pv = global_index(tik_ctx.pv.ptr, tik_ctx.pv.pitch, xid, yid, noborder)[0];
-    float vol_old, vol_new, S_c_new;
+    float vol_old, vol_new;
+    float S_c_new = 0;
+    bool print = false;
     float S_c_old = global_index(tik_ctx.S_c.ptr, tik_ctx.S_c.pitch, xid, yid, noborder)[0];
     vol_old = global_index(tik_ctx.S_c.ptr, tik_ctx.S_c.pitch, xid, yid, noborder)[0]*pv;
 
@@ -516,8 +527,14 @@ __global__ void TimeIntegrationKernel(int gridDimX){
 		float C = global_index(tik_ctx.scaling_parameter_C.ptr, tik_ctx.scaling_parameter_C.pitch,
 							   xid, yid, 0)[0];
 
-		h  = solveForh(S_c_new, H, h, common_ctx.p_ci, tik_ctx.dz, common_ctx.delta_rho, common_ctx.g, C);
+		global_index(tik_ctx.vol_new.ptr, tik_ctx.vol_new.pitch, xid, yid, noborder)[0] = S_c_new/H;
+		if (S_c_new/H > 1)
+			printf("SATU WARNING");
+		if (xid == 50 && yid == 50)
+			print = true;
+		h  = solveForh(S_c_new, H, h, common_ctx.p_ci, tik_ctx.dz, common_ctx.delta_rho, common_ctx.g, C, print);
 		global_index(tik_ctx.vol_old.ptr, tik_ctx.vol_old.pitch, xid, yid, noborder)[0] = vol_old;
+
 		global_index(tik_ctx.h.ptr, tik_ctx.h.pitch, xid, yid, noborder)[0] = h;
     }
 
@@ -529,13 +546,14 @@ void callTimeIntegration(dim3 grid, dim3 block, int gridDimX, TimeIntegrationKer
 }
 
 // Function to compute the capillary pressure in the subintervals
-__device__ float computeLambda(float* lambda_c_and_b, float p_ci, float g, float delta_rho, float H,float h, float dz, int n,
-							   float* k_values, float scaling_parameter_C){
+__device__ float computeLambda(float* lambda_c_and_b, float p_ci, float g, float delta_rho, float H, float height, float h,
+							   float dz, int n, float* k_values, float scaling_parameter_C){
 
 	float curr_p_cap = p_ci + g*(delta_rho)*(dz*0-h);
 	float curr_satu_b = computeBrineSaturation(curr_p_cap, scaling_parameter_C);
-	float curr_mob_c = computeRelPerm(1-curr_satu_b, common_ctx.lambda_end_point_c);
-	float curr_mob_b = computeRelPerm(curr_satu_b, common_ctx.lambda_end_point_b);
+	float curr_satu_e = (curr_satu_b-common_ctx.s_b_res)/(1-common_ctx.s_b_res);
+	float curr_mob_c = computeRelPermCarbon(curr_satu_e, common_ctx.lambda_end_point_c);
+	float curr_mob_b = computeRelPermBrine(curr_satu_e, common_ctx.lambda_end_point_b);
 	float curr_mobk_c = curr_mob_c*k_values[0];
 	float curr_mobk_b = curr_mob_b*k_values[0];
 	float prev_mobk_c = curr_mobk_c;
@@ -546,8 +564,15 @@ __device__ float computeLambda(float* lambda_c_and_b, float p_ci, float g, float
 		for (int i = 1; i < n; i++){
 			curr_p_cap = p_ci + g*(delta_rho)*(dz*i-h);
 			curr_satu_b = computeBrineSaturation(curr_p_cap, scaling_parameter_C);
-			curr_mob_c = computeRelPerm(1-curr_satu_b, common_ctx.lambda_end_point_c);
-			curr_mob_b =  computeRelPerm(curr_satu_b, common_ctx.lambda_end_point_b);
+
+			curr_satu_e = (curr_satu_b-common_ctx.s_b_res)/(1-common_ctx.s_b_res);
+			curr_mob_c = computeRelPermCarbon(curr_satu_e, common_ctx.lambda_end_point_c);
+			curr_mob_b = computeRelPermBrine(curr_satu_e, common_ctx.lambda_end_point_b);
+			/*
+			if (abs(H-h)<0.02 && h > 0){
+				printf("curr_satu_b %.15f diff %.15f curr_mob_b %.15f\n", curr_satu_b, curr_satu_b - common_ctx.s_b_res, curr_mob_b);
+			}
+			*/
 			curr_mobk_c = curr_mob_c*k_values[i];
 			curr_mobk_b = curr_mob_b*k_values[i];
 			sum_c += dz*0.5*(curr_mobk_c+prev_mobk_c);
@@ -555,22 +580,34 @@ __device__ float computeLambda(float* lambda_c_and_b, float p_ci, float g, float
 			prev_mobk_c = curr_mobk_c;
 			prev_mobk_b = curr_mobk_b;
 		}
-			curr_p_cap = p_ci + g*(delta_rho)*(h-h);
+			curr_p_cap = p_ci + g*(delta_rho)*(height-h);
 			curr_satu_b = computeBrineSaturation(curr_p_cap, scaling_parameter_C);
-			curr_mob_c = computeRelPerm(1-curr_satu_b, common_ctx.lambda_end_point_c);
-			curr_mob_b = computeRelPerm(curr_satu_b, common_ctx.lambda_end_point_b);
+		/*
+			if (abs(H-h)<0.02 && h > 0){
+				printf("curr_satu_b %.15f diff 5.15f \n", curr_satu_b, curr_satu_b - common_ctx.s_b_res);
+			}
+
+			*/
+			curr_satu_e = (curr_satu_b-common_ctx.s_b_res)/(1-common_ctx.s_b_res);
+			curr_mob_c = computeRelPermCarbon(curr_satu_e, common_ctx.lambda_end_point_c);
+			curr_mob_b = computeRelPermBrine(curr_satu_e, common_ctx.lambda_end_point_b);
 			curr_mobk_c = curr_mob_c*k_values[n];
 			curr_mobk_b = curr_mob_b*k_values[n];
-			sum_c += 0.5*(prev_mobk_c+curr_mobk_c)*(h-dz*(n-1));
-			sum_b += 0.5*(prev_mobk_b+curr_mobk_b)*(h-dz*(n-1));
+			sum_c += 0.5*(prev_mobk_c+curr_mobk_c)*(height-dz*(n-1));
+			sum_b += 0.5*(prev_mobk_b+curr_mobk_b)*(height-dz*(n-1));
 	}
 		// Add last part of integral to b
 		prev_mobk_b = curr_mobk_b;
-		curr_mob_b = computeRelPerm(1, common_ctx.lambda_end_point_b);
+		curr_satu_b = 1;
+		curr_satu_e = (curr_satu_b-common_ctx.s_b_res)/(1-common_ctx.s_b_res);
+		curr_mob_b = computeRelPermBrine(curr_satu_e, common_ctx.lambda_end_point_b);
 		curr_mobk_b = curr_mob_b*k_values[n];
 		sum_b += 0.5*(prev_mobk_b+curr_mobk_b)*(dz*n-h);
-		curr_mob_b = computeRelPerm(1, common_ctx.lambda_end_point_b);
 		float K_frac = trapezoidal(H-dz*n, cpi_ctx.dz, ceil((H-dz*n)/dz), (k_values+n));
+		/*if (abs(H-h)<0.02 && h > 0){
+			printf("K_frac: %.15f sum_b %.15f\n", K_frac, sum_b);
+		}
+		*/
 		sum_b += K_frac*curr_mob_b;
 		lambda_c_and_b[0] = sum_c/common_ctx.mu_c;
 		lambda_c_and_b[1] = sum_b/common_ctx.mu_b;
@@ -612,7 +649,8 @@ __global__ void CoarseMobIntegrationKernel(int gridDimX){
 							   common_ctx.H.pitch, xid, yid, 0)[0];
 		float h = global_index(cmi_ctx.h.ptr,
 						       cmi_ctx.h.pitch, xid, yid, 0)[0];
-		int nIntervalsForh = ceil(h/cmi_ctx.dz);
+		float height = fminf(H,h);
+		int nIntervalsForh = ceil(height/cmi_ctx.dz);
 
 		float K = global_index(cmi_ctx.K.ptr, cmi_ctx.K.pitch, xid, yid, 0)[0];
 
@@ -623,13 +661,16 @@ __global__ void CoarseMobIntegrationKernel(int gridDimX){
 		float C = global_index(cmi_ctx.scaling_parameter_C.ptr, cmi_ctx.scaling_parameter_C.pitch,
 							   xid, yid, 0)[0];
 
-		float L = computeLambda(lambda_c_and_b, cmi_ctx.p_ci, common_ctx.g, common_ctx.delta_rho, H, h, cmi_ctx.dz,
+		float L = computeLambda(lambda_c_and_b, cmi_ctx.p_ci, common_ctx.g, common_ctx.delta_rho, H, height, h, cmi_ctx.dz,
 				nIntervalsForh, k_values, C);
 		if (K != 0){
 			global_index(cmi_ctx.Lambda_c.ptr, cmi_ctx.Lambda_c.pitch, xid, yid, 0)[0] =  lambda_c_and_b[0]/(K*H);
 			global_index(cmi_ctx.Lambda_b.ptr, cmi_ctx.Lambda_b.pitch, xid, yid, 0)[0] =  lambda_c_and_b[1]/(K*H);
-			float rel_perm_b_at_h = computeRelPerm(1-common_ctx.s_c_res, common_ctx.lambda_end_point_b);
-			float rel_perm_c_at_h = computeRelPerm(common_ctx.s_c_res, common_ctx.lambda_end_point_c);
+			if (xid == 50 && yid ==50) // && abs(H-h) < 0.02)
+				printf("H-h:%.10f lambda_b %.4f lambda_c %.4f\n",H-h, lambda_c_and_b[1]/(K*H), lambda_c_and_b[0]/(K*H));
+			float s_e = (1-common_ctx.s_c_res-common_ctx.s_b_res)/(1-common_ctx.s_b_res);
+			float rel_perm_b_at_h = computeRelPermBrine(s_e, common_ctx.lambda_end_point_b);
+			float rel_perm_c_at_h = computeRelPermCarbon(s_e, common_ctx.lambda_end_point_c);
 			float dlambda_c = rel_perm_c_at_h*k_values[nIntervalsForh]/(common_ctx.mu_c*K*H);
 			float dlambda_b = rel_perm_b_at_h*k_values[nIntervalsForh]/(common_ctx.mu_b*K*H);
 			global_index(cmi_ctx.dLambda_c.ptr, cmi_ctx.dLambda_c.pitch, xid, yid, 0)[0] = dlambda_c;
@@ -683,8 +724,8 @@ __global__ void TimestepReductionKernel(){
 
 		if (tid == 0) {
 			dt = sdata_volatile[tid];
-			if (dt == FLT_MAX) {
-				dt = 100;
+			if (dt == FLT_MAX || dt < 200*24*60*60) {
+				dt = 200*24*60*60;
 			}
 			dt = dt*trk_ctx.cfl_scale*(1-common_ctx.s_b_res-common_ctx.s_c_res);
 			float tf = trk_ctx.global_dt[2];
