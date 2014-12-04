@@ -89,6 +89,27 @@ void readTextFile(const char* filename, CpuPtr_2D& matrix) {
 
 }
 
+void readDtTableFromMATLABFile(const char* filename, double* dt_table, int& size) {
+
+mat_t *matfp;
+matvar_t *matvar;
+matfp = Mat_Open(filename, MAT_ACC_RDONLY);
+if ( NULL == matfp ) {
+	fprintf(stderr,"Error opening MAT file");
+}
+int nx;
+
+matvar = Mat_VarReadNextInfo(matfp);
+Mat_VarReadDataAll(matfp, matvar);
+printf("name %s size %i", matvar->name, matvar->dims[0]);
+nx = matvar->dims[0];
+size = nx;
+memcpy(dt_table, matvar->data,sizeof(double)*size);
+Mat_VarFree(matvar);
+matvar = NULL;
+
+}
+
 void readFluxesFromMATLABFile(const char* filename, float* east_flux, float* north_flux) {
 
 mat_t *matfp;
@@ -114,6 +135,35 @@ nx = matvar->dims[0];
 ny = matvar->dims[1];
 size = nx*ny;
 memcpy(north_flux, matvar->data,sizeof(float)*size);
+Mat_VarFree(matvar);
+matvar = NULL;
+}
+
+void readZDiffFromMATLABFile(const char* filename, float* east_z_diff, float* north_z_diff) {
+
+mat_t *matfp;
+matvar_t *matvar;
+matfp = Mat_Open(filename, MAT_ACC_RDONLY);
+if ( NULL == matfp ) {
+	fprintf(stderr,"Error opening MAT file");
+}
+int nx, ny, nz;
+
+matvar = Mat_VarReadNextInfo(matfp);
+Mat_VarReadDataAll(matfp, matvar);
+nx = matvar->dims[0];
+ny = matvar->dims[1];
+int size = nx*ny;
+memcpy(east_z_diff, matvar->data,sizeof(float)*size);
+Mat_VarFree(matvar);
+matvar = NULL;
+
+matvar = Mat_VarReadNextInfo(matfp);
+Mat_VarReadDataAll(matfp, matvar);
+nx = matvar->dims[0];
+ny = matvar->dims[1];
+size = nx*ny;
+memcpy(north_z_diff, matvar->data,sizeof(float)*size);
 Mat_VarFree(matvar);
 matvar = NULL;
 }

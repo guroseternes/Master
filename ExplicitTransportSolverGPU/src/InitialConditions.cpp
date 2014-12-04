@@ -6,7 +6,7 @@ InitialConditions::InitialConditions(int nx, int ny, float dz){
 	this->dz = dz;
 	this->border = 1;
 
-	this->cfl_scale = 0.5*0.2;
+	this->cfl_scale = 0.5;
 	this->dt_test = 4.3711 * pow((float)10, 7);
 	this->global_time_data[0] = 0;
 	this->global_time_data[1] = 0;
@@ -74,7 +74,7 @@ void InitialConditions::createScalingParameterTable(CpuPtr_2D H){
 	scaling_parameter = CpuPtr_2D(nx,ny,0,true);
 	for (int j = 0; j < ny; j++){
 		for (int i = 0; i < nx; i++){
-			scaling_parameter(i,j) = 0.001*(-g)*delta_rho*H(i,j);
+			scaling_parameter(i,j) = 0*(-g)*delta_rho*H(i,j);
 		}
 	}
 }
@@ -84,11 +84,9 @@ void InitialConditions::createInitialCoarseSatu(CpuPtr_2D H, CpuPtr_2D h){
 	float res = integral_res/100;
 	for (int j = 0; j < ny; j++){
 			for (int i = 0; i < nx; i++){
-				initial_coarse_satu_c(i,j) = computeCoarseSaturation(p_ci, g, delta_rho, s_b_res, h(i,j), res, ceil(h(i,j)/res),
-																	 scaling_parameter(i,j), H(i,j));
-
-				//h(i,j) = computeCoarseSaturation(p_ci, g, delta_rho, s_b_res, h(i,j), integral_res, 1,
-					//												 scaling_parameter(i,j), H(i,j));
+				//initial_coarse_satu_c(i,j) = computeCoarseSaturation(p_ci, g, delta_rho, s_b_res, h(i,j), res, ceil(h(i,j)/res),
+																	// scaling_parameter(i,j), H(i,j));
+				initial_coarse_satu_c(i,j) = h(i,j)*(1-s_b_res);
 			}
 		}
 }

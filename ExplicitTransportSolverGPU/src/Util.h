@@ -43,7 +43,8 @@ void setFluxKernelArgs(FluxKernelArgs* args,
 					   GpuRawPtr Lambda_c, GpuRawPtr Lambda_b,
 					   GpuRawPtr dLambda_c, GpuRawPtr dLambda_b,
 					   GpuRawPtr U_x, GpuRawPtr U_y, GpuRawPtr source,
-					   GpuRawPtr h, GpuRawPtr z, GpuRawPtr normal_z,
+					   GpuRawPtr h, GpuRawPtr z, GpuRawPtr z_diff_east, GpuRawPtr z_diff_north,
+					   GpuRawPtr normal_z,
 					   GpuRawPtr K_face_east, GpuRawPtr K_face_north,
 					   GpuRawPtr g_vec_east, GpuRawPtr g_vec_north,
 					   GpuRawPtr R, float* dt_vector, GpuRawPtr test_output);
@@ -62,5 +63,6 @@ float computeBrineSaturation(float p_cap, float C, float s_b_res);
 
 float computeCoarseSaturation(float p_ci, float g, float delta_rho, float s_b_res, float h, float dz, int n,
 					    float scaling_parameter_C, float H);
+float computeCoarseSaturationSharpInterface(float h, float H);
 
 #endif /* UTIL_H_ */
