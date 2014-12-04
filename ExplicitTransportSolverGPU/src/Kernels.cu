@@ -611,30 +611,40 @@ __device__ float computeLambda(float* lambda_c_and_b, float p_ci, float g, float
 			*/
 
 	}
+		if (abs(H-83.42)<0.006){
+			printf("curr_satu_b %.15f diff %.15f curr_mob_b %.15f sum_b %.15f \n", curr_satu_b, curr_satu_b - common_ctx.s_b_res, curr_mob_b, sum_b);
+		}
 		float K_frac = 0;
 		if (height < H){
+		float last_bit = fminf(dz*n,H);
 		// Add last part of integral to b
-		prev_mobk_b = curr_mobk_b;
 		curr_satu_b = 1;
 		curr_satu_e = (curr_satu_b-common_ctx.s_b_res)/(1-common_ctx.s_b_res);
 		curr_mob_b = computeRelPermBrine(curr_satu_e, common_ctx.lambda_end_point_b);
 		curr_mobk_b = curr_mob_b*k_values[n];
-		sum_b += 0.5*(prev_mobk_b+curr_mobk_b)*(dz*n-height);
-		/*
-		if (abs(H-83)<0.5){
-			printf("curr_satu_b %.15f diff %.15f curr_mob_b %.15f sum_b %.15f \n", curr_satu_b, curr_satu_b - common_ctx.s_b_res, curr_mob_b, sum_b);
+		prev_mobk_b = curr_mobk_b;
+		sum_b += 0.5*(prev_mobk_b+curr_mobk_b)*(last_bit-height);
+
+		if (abs(H-83.42)<0.006){
+			printf("curr_satu_b %.15f diff %.15f curr_mob_b %.15f sum_b %.15f H %.15f \n", curr_satu_b, curr_satu_b - common_ctx.s_b_res, curr_mob_b, sum_b,H);
 		}
-	*/
-		K_frac = trapezoidal(H-dz*n, cpi_ctx.dz, ceil((H-dz*n)/dz), (k_values+n));
+
+		K_frac = trapezoidal(H-last_bit, cpi_ctx.dz, ceil((H-last_bit)/dz), (k_values+n));
 		}
 		/*if (abs(H-83.425045)<0.02 && h > H){
 					printf("K_frac %.15f \n", K_frac);
 		}
 		*/
 		sum_b += K_frac*curr_mob_b;
-		sum_b = (H-height)*0.85f*k_values[0];
+		//sum_b = K_frac*curr_mob_b;
+		sum_b = sum_b/common_ctx.mu_b;
+		float sum_b_2 = (H-height)*0.85f*k_values[0]/common_ctx.mu_b;
+		float diff = (sum_b -sum_b_2)/sum_b_2;
+		if (diff > 0.00001){
+			printf("Difference between the two %.15f sum_b %.15f sum_b %.15f H %.4f h %.9f H-dz*n %.9f\n", diff, sum_b, sum_b_2, H, height, H-dz*n);
+		}
 		lambda_c_and_b[0] = sum_c/common_ctx.mu_c;
-		lambda_c_and_b[1] = sum_b/common_ctx.mu_b;
+		lambda_c_and_b[1] = sum_b;
 		//if (lambda_c_and_b[1] < 2.6)
 			//lambda_c_and_b[1] = 0;
 		return (sum_b);
