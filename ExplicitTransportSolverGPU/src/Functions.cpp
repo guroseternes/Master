@@ -89,7 +89,7 @@ void readTextFile(const char* filename, CpuPtr_2D& matrix) {
 
 }
 
-void readDtTableFromMATLABFile(const char* filename, double* dt_table, int& size) {
+void readDtTableFromMATLABFile(const char* filename, float* dt_table, int& size) {
 
 mat_t *matfp;
 matvar_t *matvar;
@@ -104,7 +104,7 @@ Mat_VarReadDataAll(matfp, matvar);
 printf("name %s size %i", matvar->name, matvar->dims[0]);
 nx = matvar->dims[0];
 size = nx;
-memcpy(dt_table, matvar->data,sizeof(double)*size);
+memcpy(dt_table, matvar->data,sizeof(float)*size);
 Mat_VarFree(matvar);
 matvar = NULL;
 

@@ -74,7 +74,7 @@ void InitialConditions::createScalingParameterTable(CpuPtr_2D H){
 	scaling_parameter = CpuPtr_2D(nx,ny,0,true);
 	for (int j = 0; j < ny; j++){
 		for (int i = 0; i < nx; i++){
-			scaling_parameter(i,j) = 0*(-g)*delta_rho*H(i,j);
+			scaling_parameter(i,j) = 0.1*(-g)*delta_rho*H(i,j);
 		}
 	}
 }

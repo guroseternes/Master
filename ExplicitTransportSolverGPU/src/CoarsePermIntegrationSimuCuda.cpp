@@ -50,7 +50,7 @@ int main() {
 	CpuPtr_2D active_north(nx, ny, 0, true);
 	CpuPtr_2D volume(nx, ny, 0,true);
 
-	filename = "johansendata_old.mat";
+	filename = "johansendata_at_0.mat";
 	readFormationDataFromMATLABFile(filename, H.getPtr(), top_surface.getPtr(),
 			h.getPtr(), normal_z.getPtr(), perm3D.getPtr(), poro3D.getPtr(),
 			pv.getPtr(), flux_north.getPtr(), flux_east.getPtr(),
@@ -71,7 +71,7 @@ int main() {
 	FILE* Check_results_file;
 	Check_results_file = fopen("Check_results.txt", "w");
 
-	double dt_table[44];
+	float dt_table[302];
 	int size_dt_table = 0;
 
 	filename = "dt_table.mat";
@@ -218,40 +218,42 @@ int main() {
 								   IC.cfl_scale, dt_vector_device.getRawPtr());
 
 	//Compute start volume
-
+	/*
 	callCoarseMobIntegrationKernel(new_sparse_grid, IC.block, IC.grid.x, &coarse_mob_int_args);
 	callFluxKernel(IC.grid_flux, IC.block_flux, &flux_kernel_args);
 	callTimeIntegration(new_sparse_grid, IC.block, IC.grid.x, &time_int_kernel_args);
-
+	*/
 	vol_old_device.download(volume.getPtr(), 0, 0, nx, ny);
 	float total_volume_old = computeTotalVolume(volume, nx, ny);
 	//total_volume_old = stop_inject*0.162037037037037*year;
 	float injection_rate = 0.162037037037037;
 
 	t = 0;
+	double t2 = 0;
 	tf = IC.global_time_data[2];
-	int iter_total = 0;
+	int iter_outer_loop = 0;
 	int iter_inner_loop = 0;
-	float totTime = 0;
+	int iter_total = 0;
+	float time = 0;
 	float injected = 0;
 	int table_index = 1;
 	//total time in years
-	float totalTime = 0;
+	float totalTime = 500;
 	float temp_time_data[3];
 	double time_start = getWallTime();
 	double time_start_iter;
 	double total_time_gpu = 0;
 	if (run){
-		while (totTime < totalTime && iter_total < 400){
+		while (time < totalTime) {// && iter_total < 91){ // && table_index < size_dt_table){ //iter_total < 400){
 			t = 0;
-			iter_inner_total = 0;
+			iter_inner_loop = 0;
 
 			h_device.download(h.getPtr(), 0, 0, nx, ny);
 			h.convertToDoublePointer(h_matlab_matrix);
 			memcpy((void *)mxGetPr(h_matrix), (void *)h_matlab_matrix, sizeof(double)*nx*ny);
 			engPutVariable(ep, "h_matrix", h_matrix);
-			if (totTime >= stop_inject){
-				//printf("Total time in years: %.3f time in this round %.3f timestep %.3f\n", totTime, t/(60*60*24), IC.global_time_data[0]/(60*60*24));
+			if (time >= stop_inject){
+				// Total time in years: %.3f time in this round %.3f timestep %.3f\n", totTime, t/(60*60*24), IC.global_time_data[0]/(60*60*24));
 				open_well = mxCreateLogicalScalar(false);
 				engPutVariable(ep, "open_well", open_well);
 				IC.global_time_data[2] = 31536000*2;//157680000*0.5;
@@ -267,25 +269,43 @@ int main() {
 			memcpy((void *)flux_north.getPtr(), (void *)mxGetPr(flux_north_matrix), sizeof(float)*(nx+2*IC.border)*(ny+2*IC.border));
 			memcpy((void *)source.getPtr(), (void *)mxGetPr(source_matrix), sizeof(float)*nx*ny);
 
-//			readFluxesFromMATLABFile(filename, flux_east.getPtr(), flux_north.getPtr());
-
 			source_device.upload(source.getPtr(), 0, 0, nx, ny);
 			U_x_device.upload(flux_east.getPtr(), 0, 0, nx+2*IC.border, ny+2*IC.border);
 			U_y_device.upload(flux_north.getPtr(), 0, 0,nx+2*IC.border, ny+2*IC.border);
 			time_start_iter = getWallTime();
-			while (t < tf && table_index < 100){
+			while (t < tf) { //&& iter_total < 91){
 				callCoarseMobIntegrationKernel(new_sparse_grid, IC.block, IC.grid.x, &coarse_mob_int_args);
 
 				callFluxKernel(IC.grid_flux, IC.block_flux, &flux_kernel_args);
 
 				callTimestepReductionKernel(TIME_THREADS, &time_red_kernel_args);
 
+
+				if (iter_outer_loop < 1 && iter_inner_loop == 2){
+					IC.global_time_data[0] = 25066810;
+					IC.global_time_data[1] += 25066810;
+					cudaMemcpy(global_dt_device.getRawPtr(), IC.global_time_data, sizeof(float)*3, cudaMemcpyHostToDevice);
+				}
+
+
+				if (iter_outer_loop < 1 && iter_inner_loop == 1){
+					IC.global_time_data[0] = 25413443.94;
+					IC.global_time_data[1] += 25413443.94;
+					cudaMemcpy(global_dt_device.getRawPtr(), IC.global_time_data, sizeof(float)*3, cudaMemcpyHostToDevice);
+				}
+
+				if (iter_outer_loop < 1 && iter_inner_loop == 0){
+					IC.global_time_data[0] = 12591745.0588;
+					IC.global_time_data[1] += 12591745.0588;
+					cudaMemcpy(global_dt_device.getRawPtr(), IC.global_time_data, sizeof(float)*3, cudaMemcpyHostToDevice);
+				}
+
+
 				/*
 				IC.global_time_data[0] = (float)dt_table[table_index];//157680000/20;
 				IC.global_time_data[1] += (float)dt_table[table_index];//157680000/20;
 				cudaMemcpy(global_dt_device.getRawPtr(), IC.global_time_data, sizeof(float)*3, cudaMemcpyHostToDevice);
-				*/
-
+				 */
 				callTimeIntegration(new_sparse_grid, IC.block, IC.grid.x, &time_int_kernel_args);
 
 				cudaMemcpy(IC.global_time_data, global_dt_device.getRawPtr(), sizeof(float)*3, cudaMemcpyDeviceToHost);
@@ -295,17 +315,20 @@ int main() {
 
 				t += IC.global_time_data[0];
 
-				printf("Total time in years: %.3f time in this round %.3f timestep %.3f\n", totTime, t, IC.global_time_data[0]);
+				//printf("Total time in years: %.3f time in this round %.3f timestep %.3f\n", time, t, IC.global_time_data[0]);
 				table_index++;
+				iter_inner_loop++;
 				iter_total++;
+				t2 += (double)IC.global_time_data[0]/year;
+
 			}
 			total_time_gpu += getWallTime() - time_start_iter;
 			//printf("Finished Iter Total time in years: %.3f time in this round %.3f timestep %.3f\n", totTime, global_time_data[1]/(60*60*24), global_time_data[0]/(60*60*24));
-			totTime += t/(year);
-
+			time += t/(year);
+			iter_outer_loop++;
 			//engEvalString(ep, "pressureFunctionToRunfromCpp(h_matrix, variables);");
 			//printf("%s\n", cudaGetErrorString(cudaGetLastError()));
-			iter_inner_loop++;
+
 		}
 	}
 	printf("Elapsed time program: %.5f gpu part: %.5f", getWallTime() - time_start, total_time_gpu);
@@ -317,7 +340,7 @@ int main() {
 	vol_new_device.download(zeros.getPtr(), 0, 0, nx, ny);
 	zeros.printToFile(matlab_file);
     //h_device.download(zeros.getPtr(), 0, 0, nx, ny);
-    U_x_device.download(zeros.getPtr(), 1, 1, nx, ny);
+    output_test_device.download(zeros.getPtr(), 0, 0, nx, ny);
 	zeros.printToFile(matlab_file_2);
 	printf("Load error: %s\n", cudaGetErrorString(cudaGetLastError()));
 
@@ -340,9 +363,9 @@ int main() {
 
 	printf("\nCudaMemcpy error: %s", cudaGetErrorString(cudaGetLastError()));
 	//printf("\n Global timestep manual: %.2f Global timestep from Kernel: %.2f\n", mini, IC.global_time_data[0]);
-	printf("Total time: %.3f global_dt from kernel: %.3f\n", totTime, IC.global_time_data[0]/(60*60*24));
+	printf("Total time: %.3f global_dt from kernel: %.3f\n", time, IC.global_time_data[0]/(60*60*24));
 
-	printf("FINITO");
+	printf("FINITO precise time %.6f iter_total %i", t2, iter_total);
 
 
 

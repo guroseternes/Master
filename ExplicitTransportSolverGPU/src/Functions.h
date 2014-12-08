@@ -17,7 +17,7 @@ void startMatlabEngine(Engine* ep);
 float maximum(int n, float* array);
 float computeTotalVolume(CpuPtr_2D vol, int nx, int ny);
 void readSourceFromMATLABFile(const char* filename, float* source);
-void readDtTableFromMATLABFile(const char* filename, double* dt_table, int& size);
+void readDtTableFromMATLABFile(const char* filename, float* dt_table, int& size);
 void readZDiffFromMATLABFile(const char* filename, float* east_z_diff, float* north_z_diff);
 void printArray(int n, float* array);
 double getWallTime();
