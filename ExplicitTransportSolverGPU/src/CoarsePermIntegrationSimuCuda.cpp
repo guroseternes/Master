@@ -50,7 +50,7 @@ int main() {
 	CpuPtr_2D active_north(nx, ny, 0, true);
 	CpuPtr_2D volume(nx, ny, 0,true);
 
-	filename = "johansendata_at_0.mat";
+	filename = "johansendata.mat";
 	readFormationDataFromMATLABFile(filename, H.getPtr(), top_surface.getPtr(),
 			h.getPtr(), normal_z.getPtr(), perm3D.getPtr(), poro3D.getPtr(),
 			pv.getPtr(), flux_north.getPtr(), flux_east.getPtr(),
@@ -106,6 +106,17 @@ int main() {
 	IC.dz = dz;
 	IC.createnIntervalsTable(H);
 	IC.createScalingParameterTable(H);
+
+	/*
+	for (int i = 0; i < nx; i++){
+		for (int j = 0; j < ny; j++){
+			IC.scaling_parameter(i,j) = sqrt(perm3D(i,j,0)/poro3D(i,j,0))*(1000/50);
+		}
+	}
+	*/
+
+	printf("Scaling parameter test %.9f\n",IC.scaling_parameter(50,50));
+
 	IC.createInitialCoarseSatu(H, h);
 	IC.computeAllGridBlocks();
 	IC.createDtVec();
@@ -138,6 +149,7 @@ int main() {
 
 	// Allocate and set data on the GPU
 	GpuPtr_3D perm3D_device(nx, ny, nz + 1, 0, perm3D.getPtr());
+	printf("Cuda error 1.5: %s\n", cudaGetErrorString(cudaGetLastError()));
 	GpuPtr_2D Lambda_c_device(nx, ny, 0, zeros.getPtr());
 	GpuPtr_2D Lambda_b_device(nx, ny, 0, zeros.getPtr());
 	GpuPtr_2D dLambda_c_device(nx, ny, 0, zeros.getPtr());
@@ -340,7 +352,7 @@ int main() {
 	vol_new_device.download(zeros.getPtr(), 0, 0, nx, ny);
 	zeros.printToFile(matlab_file);
     //h_device.download(zeros.getPtr(), 0, 0, nx, ny);
-    output_test_device.download(zeros.getPtr(), 0, 0, nx, ny);
+    coarse_satu_device.download(zeros.getPtr(), 0, 0, nx, ny);
 	zeros.printToFile(matlab_file_2);
 	printf("Load error: %s\n", cudaGetErrorString(cudaGetLastError()));
 

@@ -79,6 +79,15 @@ void InitialConditions::createScalingParameterTable(CpuPtr_2D H){
 	}
 }
 
+void InitialConditions::createScalingParameterTable(CpuPtr_3D perm, CpuPtr_3D poro, float surface_tension_theta){
+	scaling_parameter = CpuPtr_2D(nx,ny,0,true);
+	for (int j = 0; j < ny; j++){
+		for (int i = 0; i < nx; i++){
+			scaling_parameter(i,j) = sqrt(perm(0,0,0)/poro(0,0,0))/(surface_tension_theta);
+		}
+	}
+}
+
 void InitialConditions::createInitialCoarseSatu(CpuPtr_2D H, CpuPtr_2D h){
 	initial_coarse_satu_c = CpuPtr_2D(nx, ny, 0, true);
 	float res = integral_res/100;

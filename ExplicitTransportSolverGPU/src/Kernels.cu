@@ -31,15 +31,29 @@ inline __device__ float* global_index(cudaPitchedPtr ptr, int x, int y, int z, i
         return (float*) ((char*) (ptr.ptr+(x+border)*(ptr.ysize)*ptr.pitch)) + (y+border)*(ptr.pitch/sizeof(float)) + z;
 }
 
+//NORMAL
+
 __device__ float computeBrineSaturation(float p_cap, float C){
 	return fmaxf(C*C/((C+p_cap)*(C+p_cap)), common_ctx.s_b_res);
 }
 
+
+//LEVRETT
+/*
+__device__ float computeBrineSaturation(float p_cap, float C){
+	if (p_cap >= 0)
+		return fmaxf(1/((1+C*p_cap)*(1+C*p_cap)), common_ctx.s_b_res);
+	else
+		return 1;
+}
+*/
+
+
 __device__ float computeRelPermBrine(float s_e, float lambda_end_point_b){
-		return (pow(s_e, 1)*lambda_end_point_b);
+		return (pow(s_e, 3)*lambda_end_point_b);
 }
 __device__ float computeRelPermCarbon(float s_e, float lambda_end_point_c){
-		return (pow(1-s_e, 1)*lambda_end_point_c);
+		return (pow(1-s_e, 3)*lambda_end_point_c);
 }
 
 __device__ float trapezoidal(float H, float dz, int n, float* function_values){
@@ -482,7 +496,7 @@ inline __device__ float solveForh(float S_c_new, float H, float h, float p_ci, f
 			curr_s_c = computeSatu(z, C);
 			sum += 0.5*dz*(curr_s_c + prev_s_c);
 			if (print)
-				printf("prev_s_c %.9f z: %.9f sum %.9f \n", prev_s_c, z, sum);
+				printf("curr_s_c %.9f z: %.9f sum %.9f C: %.9f \n", curr_s_c, z, sum, common_ctx.p_ci + common_ctx.g*common_ctx.delta_rho*(-z));
 			i++;
 		}
 		int nIter = 0;
@@ -557,12 +571,12 @@ __global__ void TimeIntegrationKernel(int gridDimX){
 		if (S_c_new/H > 1)
 			printf("SATU WARNING");
 
-		/*
+
 		if (xid == 50 && yid == 50){
 			printf("Saturation %.8f vol: %.8f pv: %.8f\n", S_c_new/H, vol_new, pv);
 			print = true;
 		}
-		*/
+
 		h  = solveForh(S_c_new, H, h, common_ctx.p_ci, tik_ctx.dz, common_ctx.delta_rho, common_ctx.g, C, print);
 		global_index(tik_ctx.vol_new.ptr, tik_ctx.vol_new.pitch, xid, yid, noborder)[0] = vol_new;
 		global_index(tik_ctx.vol_old.ptr, tik_ctx.vol_old.pitch, xid, yid, noborder)[0] = vol_old;
@@ -602,7 +616,7 @@ __device__ float computeLambda(float* lambda_c_and_b, float p_ci, float g, float
 			curr_mob_b = computeRelPermBrine(curr_satu_e, common_ctx.lambda_end_point_b);
 
 			if (abs(H-83.4)<0.05 && print){
-				printf("curr_satu_b %.15f diff %.15f curr_mob_b %.15f sum_b %.15f \n", curr_satu_b, curr_satu_b - common_ctx.s_b_res, curr_mob_b, sum_b);
+				printf("curr_satu_b %.15f curr_p_cap %.15f curr_mob_b %.15f sum_b %.15f \n", curr_satu_b, curr_p_cap, curr_mob_b, sum_b);
 			}
 
 			curr_mobk_c = curr_mob_c*k_values[i];
@@ -730,15 +744,18 @@ __global__ void CoarseMobIntegrationKernel(int gridDimX){
 		if (K != 0){
 			global_index(cmi_ctx.Lambda_c.ptr, cmi_ctx.Lambda_c.pitch, xid, yid, 0)[0] =  lambda_c_and_b[0]/(K);
 			global_index(cmi_ctx.Lambda_b.ptr, cmi_ctx.Lambda_b.pitch, xid, yid, 0)[0] =  lambda_c_and_b[1]/(K);
-			//if (xid == 50 && yid ==50) // && abs(H-h) < 0.02)
-			//	printf("H-h:%.10f lambda_b %.4f lambda_c %.4f\n",H-h, lambda_c_and_b[1]/(K), lambda_c_and_b[0]/(K));
+			if (xid == 50 && yid ==50) // && abs(H-h) < 0.02)
+				printf("H-h:%.10f lambda_b %.4f lambda_c %.4f\n",H-h, lambda_c_and_b[1]/(K), lambda_c_and_b[0]/(K));
 			float s_e = (1-common_ctx.s_c_res-common_ctx.s_b_res)/(1-common_ctx.s_b_res);
 			float rel_perm_b_at_h = computeRelPermBrine(s_e, common_ctx.lambda_end_point_b);
 			float rel_perm_c_at_h = computeRelPermCarbon(s_e, common_ctx.lambda_end_point_c);
+			/*
 			float dlambda_c = 1/(common_ctx.mu_c);
 			float dlambda_b = 1/(common_ctx.mu_b);
-			//float dlambda_c = rel_perm_c_at_h*k_values[nIntervalsForh]/(common_ctx.mu_c*K);
-			//float dlambda_b = rel_perm_b_at_h*k_values[nIntervalsForh]/(common_ctx.mu_b*K);
+			*/
+			float dlambda_c = common_ctx.lambda_end_point_c*k_values[nIntervalsForh]/(common_ctx.mu_c*K);
+			float dlambda_b = common_ctx.lambda_end_point_b*k_values[nIntervalsForh]/(common_ctx.mu_b*K);
+
 			global_index(cmi_ctx.dLambda_c.ptr, cmi_ctx.dLambda_c.pitch, xid, yid, 0)[0] = dlambda_c;
 			global_index(cmi_ctx.dLambda_b.ptr, cmi_ctx.dLambda_b.pitch, xid, yid, 0)[0] = dlambda_b;
 		}
