@@ -48,8 +48,6 @@ struct FluxKernelArgs  {
 	GpuRawPtr U_y;
 	GpuRawPtr h;
 	GpuRawPtr z;
-	GpuRawPtr z_diff_east;
-	GpuRawPtr z_diff_north;
 	GpuRawPtr normal_z;
 	GpuRawPtr K_face_east;
 	GpuRawPtr K_face_north;

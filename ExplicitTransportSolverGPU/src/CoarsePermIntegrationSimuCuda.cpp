@@ -21,7 +21,7 @@ int main() {
 	int year = 60*60*24*365;
 	int stop_inject = 100;
 	bool run = true;
-	char* filename = "dimensions.mat";
+	char* filename = "dimensions_johansen.mat";
 	cudaSetDevice(0);
 	int device;
 	cudaGetDevice(&device);
@@ -56,7 +56,7 @@ int main() {
 			pv.getPtr(), flux_north.getPtr(), flux_east.getPtr(),
 			grav_north.getPtr(), grav_east.getPtr(), K_face_north.getPtr(),
 			K_face_east.getPtr(), dz);
-	filename = "active_cells.mat";
+	filename = "active_cells_johansen.mat";
 	readActiveCellsFromMATLABFile(filename, active_east.getPtr(), active_north.getPtr());
 
 	//readSourceFromMATLABFile(filename, source.getPtr());
@@ -219,7 +219,6 @@ int main() {
 			dLambda_c_device.getRawPtr(), dLambda_b_device.getRawPtr(),
 			U_x_device.getRawPtr(), U_y_device.getRawPtr(), source_device.getRawPtr(),
 			h_device.getRawPtr(),top_surface_device.getRawPtr(),
-			z_diff_east_device.getRawPtr(), z_diff_north_device.getRawPtr(),
 			normal_z_device.getRawPtr(),
 			K_face_east_device.getRawPtr(), K_face_north_device.getRawPtr(),
 			grav_east_device.getRawPtr(), grav_north_device.getRawPtr(),
