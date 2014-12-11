@@ -15,7 +15,8 @@ void computeGridBlock(dim3& grid, dim3& block, int NX, int NY, int block_x, int 
 
 void createGridMask(CpuPtr_2D H, dim3 grid, dim3 block, int nx, int ny,
 				    std::vector<int> &activeBlockIndexes, int& nActiveBlocks);
-
+void createGridMaskFlux(CpuPtr_2D H, dim3 grid, dim3 block, int nx, int ny,
+					std::vector<int> &activeBlockIndexes, int& nActiveBlocks);
 
 
 void setCommonArgs(CommonArgs* args, float p_ci, float delta_rho, float g, float mu_c, float mu_b,
@@ -47,7 +48,8 @@ void setFluxKernelArgs(FluxKernelArgs* args,
 					   GpuRawPtr normal_z,
 					   GpuRawPtr K_face_east, GpuRawPtr K_face_north,
 					   GpuRawPtr g_vec_east, GpuRawPtr g_vec_north,
-					   GpuRawPtr R, float* dt_vector, GpuRawPtr test_output);
+					   GpuRawPtr R, float* dt_vector, GpuRawPtrInt a_b_i,
+					   GpuRawPtr test_output);
 
 
 void setTimeIntegrationKernelArgs(TimeIntegrationKernelArgs* args, float* global_dt, float dz,

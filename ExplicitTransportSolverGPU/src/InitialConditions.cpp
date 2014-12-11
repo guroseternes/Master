@@ -29,24 +29,12 @@ InitialConditions::InitialConditions(int nx, int ny, float dz){
 	this->s_b_res = 0.1;
 	this->s_c_res = 0.2;
 	this->lambda_end_point_c = 0.2142;
-	float temp = (1-s_c_res-s_b_res)/(1-s_b_res);
 	this->lambda_end_point_b = 0.85;//1/pow(temp,3);
 
 	// Table of capillary pressure values for our subintervals along the z-axis ranging from 0 to h
 	this->resolution = 0.01;
 	this->size_tables = 1.0/resolution + 1;
 
-	// Permeability data (In real simulations this will be a table based on rock data, here we use a random distribution )
-	float data[10] =  {0.9352, 1.0444, 0.9947, 0.9305, 0.9682, 1.0215, 0.9383, 1.0477, 0.9486, 1.0835};
-	this->k_data = new float[10];
-	for (int i = 0; i < 10; i++){
-		this->k_data[i] = data[i];
-	}
-	float heights[10] =  {10, 20, 150, 220, 240, 255, 301, 323, 380, 400};
-	this->k_heights = new float[10];
-	for (int i = 0; i < 10; i++){
-		this->k_heights[i] = heights[i];
-	}
 }
 void InitialConditions::computeAllGridBlocks(){
 	computeGridBlock(grid, block, nx, ny, BLOCKDIM_X_FLUX, BLOCKDIM_Y_FLUX);

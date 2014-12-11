@@ -55,6 +55,7 @@ struct FluxKernelArgs  {
 	GpuRawPtr g_vec_north;
 	GpuRawPtr source;
 	GpuRawPtr test_output;
+	GpuRawPtrInt active_block_indexes;
 
 	float* dt_vector;
 };

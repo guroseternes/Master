@@ -225,14 +225,17 @@ inline __device__ float computeFluxNorth(float (&U)[BLOCKDIM_X_FLUX][SM_BLOCKDIM
 	return dt_temp;
 }
 
-__global__ void FluxKernel(){
+__global__ void FluxKernel(int gridDimX){
 
 	int border = common_ctx.border;
 	int noborder = 0;
 
+	int xid = (fk_ctx.active_block_indexes.ptr[blockIdx.x] % gridDimX)*TILEDIM_X + threadIdx.x-border;
+	int yid = (fk_ctx.active_block_indexes.ptr[blockIdx.x]/gridDimX)*TILEDIM_Y + threadIdx.y - border;
+
 	// Global id
-	int xid = blockIdx.x*TILEDIM_X + threadIdx.x-border;
-    int yid = blockIdx.y*TILEDIM_Y + threadIdx.y-border;
+	//int xid = blockIdx.x*TILEDIM_X + threadIdx.x-border;
+    //int yid = blockIdx.y*TILEDIM_Y + threadIdx.y-border;
 
     xid = fminf(xid, common_ctx.nx);
     yid = fminf(yid, common_ctx.ny);
@@ -374,9 +377,9 @@ __global__ void FluxKernel(){
 
 }
 
-void callFluxKernel(dim3 grid, dim3 block, FluxKernelArgs* args){
+void callFluxKernel(dim3 grid, dim3 block, int gridDimX, FluxKernelArgs* args){
 	cudaMemcpyToSymbolAsync(fk_ctx, args, sizeof(FluxKernelArgs), 0, cudaMemcpyHostToDevice);
-	FluxKernel<<<grid, block>>>();
+	FluxKernel<<<grid, block>>>(gridDimX);
 }
 
 inline __device__ float computeSatu(float z, float C){

@@ -68,8 +68,6 @@ int main() {
 	matlab_file = fopen("/home/guro/mrst-bitbucket/mrst-other/co2lab/toMATLAB.txt", "w");
 	FILE* matlab_file_2;
 	matlab_file_2 = fopen("/home/guro/mrst-bitbucket/mrst-other/co2lab/toMATLAB1.txt", "w");
-	FILE* Check_results_file;
-	Check_results_file = fopen("Check_results.txt", "w");
 
 	float dt_table[302];
 	int size_dt_table = 0;
@@ -115,7 +113,7 @@ int main() {
 	}
 	*/
 
-	printf("Scaling parameter test %.9f\n",IC.scaling_parameter(50,50));
+	printf("Scaling parameter test %.9f\n nElements %i",IC.scaling_parameter(50,50), IC.nElements);
 
 	IC.createInitialCoarseSatu(H, h);
 	IC.computeAllGridBlocks();
@@ -123,13 +121,22 @@ int main() {
 
 	// Create mask for sparse grid on GPU
 	std::vector<int> active_block_indexes;
+	std::vector<int> active_block_indexes_flux;
 	int n_active_blocks = 0;
+	int n_active_blocks_flux = 0;
 	createGridMask(H, IC.grid, IC.block, nx, ny, active_block_indexes,
 			n_active_blocks);
+	createGridMaskFlux(H, IC.grid_flux, IC.block_flux, nx, ny, active_block_indexes_flux,
+			n_active_blocks_flux);
+
 	printf("nBlocks: %i nActiveBlocks: %i fraction: %.5f\n", IC.grid.x * IC.grid.y,
 			n_active_blocks, (float) n_active_blocks / (IC.grid.x * IC.grid.y));
+	printf("nBlocks: %i nActiveBlocks: %i fraction: %.5f\n", IC.grid_flux.x * IC.grid_flux.y,
+			n_active_blocks_flux, (float) n_active_blocks_flux / (IC.grid_flux.x * IC.grid_flux.y));
+
 	printf("dz: %.3f\n", IC.dz);
 	dim3 new_sparse_grid(n_active_blocks, 1, 1);
+	dim3 new_sparse_grid_flux(n_active_blocks_flux, 1, 1);
 
 	CommonArgs common_args;
 	CoarseMobIntegrationKernelArgs coarse_mob_int_args;
@@ -188,6 +195,9 @@ int main() {
 	GpuPtrInt_1D active_block_indexes_device(n_active_blocks,
 			&active_block_indexes[0]);
 
+	GpuPtrInt_1D active_block_indexes_flux_device(n_active_blocks_flux,
+			&active_block_indexes_flux[0]);
+
 	setCommonArgs(&common_args, IC.p_ci, IC.delta_rho, IC.g, IC.mu_c, IC.mu_b,
 			IC.s_c_res, IC.s_b_res, IC.lambda_end_point_c, IC.lambda_end_point_b,
 			active_east_device.getRawPtr(), active_north_device.getRawPtr(),
@@ -222,7 +232,7 @@ int main() {
 			normal_z_device.getRawPtr(),
 			K_face_east_device.getRawPtr(), K_face_north_device.getRawPtr(),
 			grav_east_device.getRawPtr(), grav_north_device.getRawPtr(),
-			R_device.getRawPtr(), dt_vector_device.getRawPtr(),
+			R_device.getRawPtr(), dt_vector_device.getRawPtr(), active_block_indexes_flux_device.getRawPtr(),
 			output_test_device.getRawPtr());
 
 	setTimestepReductionKernelArgs(&time_red_kernel_args, TIME_THREADS, IC.nElements, global_dt_device.getRawPtr(),
@@ -287,7 +297,7 @@ int main() {
 			while (t < tf) { //&& iter_total < 91){
 				callCoarseMobIntegrationKernel(new_sparse_grid, IC.block, IC.grid.x, &coarse_mob_int_args);
 
-				callFluxKernel(IC.grid_flux, IC.block_flux, &flux_kernel_args);
+				callFluxKernel(new_sparse_grid_flux, IC.block_flux, IC.grid_flux.x, &flux_kernel_args);
 
 				callTimestepReductionKernel(TIME_THREADS, &time_red_kernel_args);
 

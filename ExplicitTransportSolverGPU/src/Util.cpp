@@ -1,4 +1,5 @@
 #include "Util.h"
+#include "Kernels.h"
 
 void computeGridBlock(dim3& grid, dim3& block, int NX, int NY, int block_x, int block_y){
         block.x = block_x;
@@ -33,6 +34,42 @@ void createGridMask(CpuPtr_2D H, dim3 grid, dim3 block, int nx, int ny, std::vec
 								activeBlocks[grid.x*j + i] = 0;
 						} else {
 							H(xid, yid) = 0; //Change this later
+						}
+					}
+				}
+			}
+		}
+	}
+
+	for (int k = 0; k < size; k++){
+		if (activeBlocks[k] == 0){
+			activeBlockIndexes.push_back(k);
+			nActiveBlocks++;
+		}
+	}
+}
+
+void createGridMaskFlux(CpuPtr_2D H, dim3 grid, dim3 block, int nx, int ny, std::vector<int> &activeBlockIndexes, int& nActiveBlocks){
+	int xid, yid;
+	int size = grid.x*grid.y;
+	int border = 1;
+
+	// Array to keep track of which block that are active
+	int activeBlocks[size];
+	for (int k = 0; k < size; k++){
+		activeBlocks[k] = -1;
+	}
+	for (int j = 0; j < grid.y; j++){
+		for (int i = 0; i < grid.x; i++){
+			for (int y = 0; y < block.y; y++){
+				for (int x = 0; x < block.x; x++){
+					int xid = i*TILEDIM_X + x - border;
+				    int yid = j*TILEDIM_Y + y-border;
+				    xid = fmaxf(xid, 0);
+				    yid = fmaxf(yid, 0);
+					if (xid < nx && yid < ny){
+						if (H(xid, yid) > 0){
+								activeBlocks[grid.x*j + i] = 0;
 						}
 					}
 				}
@@ -116,7 +153,8 @@ void setFluxKernelArgs(FluxKernelArgs* args,
 					   GpuRawPtr normal_z,
 					   GpuRawPtr K_face_east, GpuRawPtr K_face_north,
 					   GpuRawPtr g_vec_east, GpuRawPtr g_vec_north,
-					   GpuRawPtr R, float* dt_vector, GpuRawPtr test_output){
+					   GpuRawPtr R, float* dt_vector, GpuRawPtrInt a_b_i,
+					   GpuRawPtr test_output){
 	args->Lambda_c = Lambda_c;
 	args->Lambda_b = Lambda_b;
 	args->dLambda_c = dLambda_c;
@@ -135,6 +173,7 @@ void setFluxKernelArgs(FluxKernelArgs* args,
 	args->g_vec_north = g_vec_north;
 	args->R = R;
 
+	args->active_block_indexes = a_b_i;
 	args->dt_vector = dt_vector;
 }
 

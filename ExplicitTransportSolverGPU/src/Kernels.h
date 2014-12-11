@@ -33,7 +33,7 @@ void initAllocate(CommonArgs* args1, CoarsePermIntegrationKernelArgs* args2,
 				  CoarseMobIntegrationKernelArgs* args3, FluxKernelArgs* args4,
 				  TimeIntegrationKernelArgs* args5, TimestepReductionKernelArgs* args6);
 
-void callFluxKernel(dim3 grid, dim3 block, FluxKernelArgs* args);
+void callFluxKernel(dim3 grid, dim3 block, int gridDimX, FluxKernelArgs* args);
 
 void callTimeIntegration(dim3 grid, dim3 block, int gridDimX, TimeIntegrationKernelArgs* args);
 
