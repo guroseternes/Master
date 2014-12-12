@@ -515,9 +515,9 @@ __global__ void TimeIntegrationKernel(int gridDimX){
 		float C = global_index(tik_ctx.scaling_parameter_C.ptr, tik_ctx.scaling_parameter_C.pitch,
 							   xid, yid, 0)[0];
 
-		//if (S_c_new/H > 1)
-		//	printf("SATU WARNING");
-
+		/*if (S_c_new/H > 0.91)
+			printf("SATU WARNING");
+		*/
 		h  = solveForh(S_c_new, H, h, common_ctx.p_ci, tik_ctx.dz, common_ctx.delta_rho, common_ctx.g, C);
 		global_index(tik_ctx.vol_new.ptr, tik_ctx.vol_new.pitch, xid, yid, noborder)[0] = vol_new;
 		global_index(tik_ctx.vol_old.ptr, tik_ctx.vol_old.pitch, xid, yid, noborder)[0] = vol_old;

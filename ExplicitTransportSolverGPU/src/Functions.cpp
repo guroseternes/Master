@@ -21,13 +21,16 @@ void print_properties(){
         printf("\n\n");
 }
 
-void startMatlabEngine(Engine* ep){
+void startMatlabEngine(Engine* ep, char* formation){
 	engEvalString(ep, "cd ~/mrst-bitbucket/mrst-core;");
 	engEvalString(ep, "startup;");
 	engEvalString(ep, "startup_user;");
 	engEvalString(ep, "cd ~/mrst-bitbucket/mrst-other/co2lab;");
 	engEvalString(ep, "startuplocal");
-	engEvalString(ep, "cd ~/mrst-bitbucket/mrst-other/co2lab/guro_code;");
+	char str[100];
+	strcpy(str, "cd ~/mrst-bitbucket/mrst-other/co2lab/guro_code/");
+	strcat(str,formation);
+	engEvalString(ep, str);
 	engEvalString(ep, "variables = loadDataForCpp;");
 }
 
@@ -226,7 +229,7 @@ mat_t *matfp;
 matvar_t *matvar;
 matfp = Mat_Open(filename, MAT_ACC_RDONLY);
 if ( NULL == matfp ) {
-	fprintf(stderr,"Error opening MAT file");
+	fprintf(stderr,"Error opening MAT file 2");
 }
 int nx, ny, nz;
 
@@ -330,7 +333,7 @@ mat_t *matfp;
 matvar_t *matvar;
 matfp = Mat_Open(filename, MAT_ACC_RDONLY);
 if ( NULL == matfp ) {
-	fprintf(stderr,"Error opening MAT file");
+	fprintf(stderr,"Error opening MAT file 1");
 }
 
 matvar = Mat_VarReadNextInfo(matfp);

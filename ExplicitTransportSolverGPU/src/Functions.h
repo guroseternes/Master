@@ -13,7 +13,7 @@
 using namespace std;
 
 void print_properties();
-void startMatlabEngine(Engine* ep);
+void startMatlabEngine(Engine* ep, char* formation);
 float maximum(int n, float* array);
 float computeTotalVolume(CpuPtr_2D vol, int nx, int ny);
 void readSourceFromMATLABFile(const char* filename, float* source);

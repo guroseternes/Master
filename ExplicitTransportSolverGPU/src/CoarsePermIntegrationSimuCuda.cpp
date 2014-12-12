@@ -21,13 +21,18 @@ int main() {
 	int year = 60*60*24*365;
 	int stop_inject = 100;
 	bool run = true;
-	char* filename = "dimensions_johansen.mat";
+	char* formation = "johansen";
+	char* formation_data_folder = "Johansen_Data";
+	char filename[50];
+	strcpy(filename,formation);
+	strcat (filename, "_dimensions.mat");
 	cudaSetDevice(0);
 	int device;
 	cudaGetDevice(&device);
 	cudaDeviceProp p;
 	cudaGetDeviceProperties(&p, device);
 	printf("Name: %s\n", p.name);
+	printf("filename %s\n", filename);
 	readDimensionsFromMATLABFile(filename, nx, ny, nz);
 	InitialConditions IC(nx, ny, 5);
 	printf("nx: %i, ny: %i nz: %i dt: %.10f", nx, ny, nz, dt);
@@ -50,13 +55,15 @@ int main() {
 	CpuPtr_2D active_north(nx, ny, 0, true);
 	CpuPtr_2D volume(nx, ny, 0,true);
 
-	filename = "johansendata.mat";
+	strcpy(filename,formation);
+	strcat (filename, "data.mat");
 	readFormationDataFromMATLABFile(filename, H.getPtr(), top_surface.getPtr(),
 			h.getPtr(), normal_z.getPtr(), perm3D.getPtr(), poro3D.getPtr(),
 			pv.getPtr(), flux_north.getPtr(), flux_east.getPtr(),
 			grav_north.getPtr(), grav_east.getPtr(), K_face_north.getPtr(),
 			K_face_east.getPtr(), dz);
-	filename = "active_cells_johansen.mat";
+	strcpy(filename,formation);
+	strcat (filename, "_active_cells.mat");
 	readActiveCellsFromMATLABFile(filename, active_east.getPtr(), active_north.getPtr());
 
 	//readSourceFromMATLABFile(filename, source.getPtr());
@@ -72,18 +79,17 @@ int main() {
 	float dt_table[302];
 	int size_dt_table = 0;
 
-	filename = "dt_table.mat";
+	strcpy(filename, "dt_table.mat");
 	readDtTableFromMATLABFile(filename, dt_table, size_dt_table);
 
-	filename = "source.mat";
+
 	Engine *ep;
-	//startMatlabEngine();
 	if (!(ep = engOpen(""))) {
 		fprintf(stderr, "\nCan't start MATLAB engine\n");
 		return EXIT_FAILURE;
 	}
 
-	startMatlabEngine(ep);
+	startMatlabEngine(ep, formation_data_folder);
 
 	mxArray *h_matrix = NULL, *flux_east_matrix = NULL, *flux_north_matrix=NULL, *source_matrix = NULL, *open_well = NULL;
 	open_well = mxCreateLogicalScalar(true);
@@ -255,17 +261,18 @@ int main() {
 	int iter_outer_loop = 0;
 	int iter_inner_loop = 0;
 	int iter_total = 0;
+	int iter_total_lim;
 	float time = 0;
 	float injected = 0;
 	int table_index = 1;
 	//total time in years
-	float totalTime = 500;
+	float totalTime = 10;
 	float temp_time_data[3];
 	double time_start = getWallTime();
 	double time_start_iter;
 	double total_time_gpu = 0;
 	if (run){
-		while (time < totalTime) {// && iter_total < 91){ // && table_index < size_dt_table){ //iter_total < 400){
+		while (time < totalTime && iter_total < 200){ // && table_index < size_dt_table){ //iter_total < 400){
 			t = 0;
 			iter_inner_loop = 0;
 
@@ -294,7 +301,7 @@ int main() {
 			U_x_device.upload(flux_east.getPtr(), 0, 0, nx+2*IC.border, ny+2*IC.border);
 			U_y_device.upload(flux_north.getPtr(), 0, 0,nx+2*IC.border, ny+2*IC.border);
 			time_start_iter = getWallTime();
-			while (t < tf) { //&& iter_total < 91){
+			while (t < tf && iter_total < 200){
 				callCoarseMobIntegrationKernel(new_sparse_grid, IC.block, IC.grid.x, &coarse_mob_int_args);
 
 				callFluxKernel(new_sparse_grid_flux, IC.block_flux, IC.grid_flux.x, &flux_kernel_args);
@@ -331,7 +338,7 @@ int main() {
 
 				cudaMemcpy(IC.global_time_data, global_dt_device.getRawPtr(), sizeof(float)*3, cudaMemcpyDeviceToHost);
 
-
+				//injected += IC.global_time_data[0]*source(24,40);
 				injected += IC.global_time_data[0]*source(50,50);
 
 				t += IC.global_time_data[0];
@@ -361,16 +368,15 @@ int main() {
 	vol_new_device.download(zeros.getPtr(), 0, 0, nx, ny);
 	zeros.printToFile(matlab_file);
     //h_device.download(zeros.getPtr(), 0, 0, nx, ny);
-    coarse_satu_device.download(zeros.getPtr(), 0, 0, nx, ny);
+    R_device.download(zeros.getPtr(), 0, 0, nx, ny);
 	zeros.printToFile(matlab_file_2);
 	printf("Load error: %s\n", cudaGetErrorString(cudaGetLastError()));
 
 	vol_new_device.download(zeros.getPtr(), 0, 0, nx, ny);
 	float total_volume_new = computeTotalVolume(zeros, nx, ny);
 
-	printf("total volume new %.2f total volume old %.2f frac: %.10f injected %.1f injected fraction %.10f",
-			total_volume_new, total_volume_old, (total_volume_new-total_volume_old)/(total_volume_old),
-			injected, (total_volume_new-injected)/(injected));
+	printf("total volume new %.2f total volume old %.2f injected %.1f injected fraction %.10f",
+			total_volume_new, total_volume_old, injected, (total_volume_new-injected)/(injected));
 
 	printf("Load error: %s\n", cudaGetErrorString(cudaGetLastError()));
 	cudaMemcpy(IC.dt_vector, dt_vector_device.getRawPtr(), sizeof(float)*(IC.nElements), cudaMemcpyDeviceToHost);
