@@ -294,10 +294,11 @@ __global__ void FluxKernel(int gridDimX){
     if (i < (TILEDIM_X+1) && j < (TILEDIM_Y+1)) {
     	dt_local = computeFluxEast(U_local_x, lambda_c_local, lambda_b_local,
     			dlambda_c_local, dlambda_b_local, h_local, z_local, normal_z_local, K_face_east, g_vec_east, pv_local, i, j);
-    	if (xid == 42 && yid <= 43 ){
+    	/*if (xid == 42 && yid <= 43 ){
     		U_local_x[i][j] = 0;
     		dt_local = default_;
     	}
+    	*/
     	dt_local = fminf(dt_local, computeFluxNorth(U_local_y, lambda_c_local, lambda_b_local,
     			dlambda_c_local, dlambda_b_local, h_local, z_local, normal_z_local, K_face_north ,g_vec_north, pv_local, i, j));
     	if (global_index(common_ctx.H.ptr, common_ctx.H.pitch, new_xid, new_yid, noborder)[0] == 0) {
@@ -305,11 +306,13 @@ __global__ void FluxKernel(int gridDimX){
     		U_local_x[i][j] = 0;
     		U_local_y[i][j] = 0;
     	}
+    	// NO-FLOW BOUNDARY
     	if (xid == 0 || yid == 0 || xid == common_ctx.nx || yid == common_ctx.ny) {
     		dt_local = default_;
     		U_local_x[i][j] = 0;
     		U_local_y[i][j] = 0;
     	}
+
     	if (active_east == -1){
     		U_local_x[i][j] = 0;
     		//dt_local = default_;
@@ -400,6 +403,7 @@ inline __device__ void higherResolutionIteration(float& z, float& sum, float C, 
 		sum += 0.5*dz*(curr_s_c + prev_s_c);
 		//i++;
 	}
+	//printf("tol %.7f", 0.5*dz*(curr_s_c + prev_s_c));
 }
 
 inline __device__ void higherResolutionIterationWithShift(float H, float& z, float& z_bottom, float& sum, float C, float& prev_s_c, float& curr_s_c,
@@ -441,6 +445,63 @@ inline __device__ void higherResolutionIterationWithShift(float H, float& z, flo
 	firstIter = false;
 }
 
+inline __device__ float F(float S_c_new, float H, float h, float p_ci, float dz, float delta_rho, float g, float C){
+	float height = fminf(H,h);
+	int n = ceil(height/dz);
+	float curr_p_cap = p_ci + g*(delta_rho)*(dz*0-h);
+	float curr_satu_c = 1-computeBrineSaturation(curr_p_cap, C);
+	float prev_satu_c = curr_satu_c;
+	float sum_c = 0;
+	if (n>0){
+		for (int i = 1; i < n; i++){
+			curr_p_cap = p_ci + g*(delta_rho)*(dz*i-h);
+			curr_satu_c = 1-computeBrineSaturation(curr_p_cap, C);
+			sum_c += dz*0.5*(curr_satu_c+prev_satu_c);
+			prev_satu_c = curr_satu_c;
+		}
+			curr_p_cap = p_ci + g*(delta_rho)*(height-h);
+			curr_satu_c = 1-computeBrineSaturation(curr_p_cap, C);
+			sum_c += 0.5*(prev_satu_c+curr_satu_c)*(height-dz*(n-1));
+	}
+
+	return (S_c_new - sum_c);
+
+}
+
+inline __device__ float solveForhNewton(float S_c_new, float H, float previous_h, float p_ci, float dz,
+		                                float delta_rho, float g, float C, bool &iter_lim){
+	//float h_init = fmaxf(1,previous_h);
+	float h_old = fmaxf(1,previous_h);
+	h_old = fmaxf(h_old, S_c_new);
+	float h_new = 0;
+	float e = 1000;
+	float TOL = 0.000005;
+	float F_h_old;
+	float F_deriv_h_old;
+	int iter = 0;
+	int max_iter = 4;
+	if (S_c_new == 0)
+			return 0;
+	while (e > TOL && iter < max_iter){
+		F_h_old = F(S_c_new, H, h_old, p_ci, dz, delta_rho, g, C);
+		if (h_old <= H) {
+			F_deriv_h_old = -computeSatu(h_old, C);
+		} else {
+			F_deriv_h_old = -computeSatu(h_old, C) + computeSatu(h_old-H,C);
+		}
+		h_new = h_old - F_h_old/F_deriv_h_old;
+		e = abs(h_new - h_old);
+		//if (print)
+		//	printf("h_old %.10f F_deriv_h_old %.10f F_h_old %.10f e %.10f \n", h_old, F_deriv_h_old, F_h_old,e);
+		h_old = h_new;
+		iter++;
+	}
+	if (iter == max_iter)
+			iter_lim = true;
+	//printf("S_c_new %.3f H %.3f h %.3f h_init %.3f iters %i\n", S_c_new/H, H, h_old, h_init, iter);
+	return h_new;
+}
+
 inline __device__ float solveForh(float S_c_new, float H, float h, float p_ci, float dz, float delta_rho, float g, float C){
 	float eps = dz/(10*10*10*10*10*10); // 7 times
 	float sum = 0;
@@ -472,12 +533,7 @@ inline __device__ float solveForh(float S_c_new, float H, float h, float p_ci, f
 		}
 
 	}
-	if (z > 0){
-		return z;
-	}
-	else
-		return 0;
-
+		return fmaxf(0,z);
 }
 
 __global__ void TimeIntegrationKernel(int gridDimX){
@@ -499,7 +555,7 @@ __global__ void TimeIntegrationKernel(int gridDimX){
 
     float r = global_index(tik_ctx.R.ptr, tik_ctx.R.pitch, xid, yid, noborder)[0];
 	float h =  global_index(tik_ctx.h.ptr, tik_ctx.h.pitch, xid, yid, 0)[0];
-	global_index(tik_ctx.h.ptr, tik_ctx.h.pitch, xid, yid, 0)[0] = 0;
+	//global_index(tik_ctx.h.ptr, tik_ctx.h.pitch, xid, yid, 0)[0] = 0;
     vol_new = vol_old - dt*r;
     if (pv != 0){
 		S_c_new = vol_new/pv;
@@ -511,16 +567,33 @@ __global__ void TimeIntegrationKernel(int gridDimX){
 			vol_new = pv*S_c_new;
 		}
 		*/
+		float diff = S_c_new-S_c_old;
 		global_index(tik_ctx.S_c.ptr, tik_ctx.S_c.pitch, xid, yid, noborder)[0] = S_c_new;
 		float C = global_index(tik_ctx.scaling_parameter_C.ptr, tik_ctx.scaling_parameter_C.pitch,
 							   xid, yid, 0)[0];
 
-		/*if (S_c_new/H > 0.91)
-			printf("SATU WARNING");
+		/*if (xid == 37 && yid == 70){
+			printf("Satu %.3f xid: %i yid: %i \n", S_c_new/H, xid, yid);
+		}
 		*/
-		h  = solveForh(S_c_new, H, h, common_ctx.p_ci, tik_ctx.dz, common_ctx.delta_rho, common_ctx.g, C);
+
+		float prev_h = global_index(tik_ctx.h.ptr, tik_ctx.h.pitch, xid, yid, noborder)[0];
+		bool iter_lim = false;
+		h  = solveForhNewton(S_c_new, H, prev_h, common_ctx.p_ci, 1, common_ctx.delta_rho, common_ctx.g, C, iter_lim);
+
+		//if ((xid == 18 && yid == 40))
+		//	print = true;
+		//h  = solveForhNewton(S_c_new, H, prev_h, common_ctx.p_ci, 1, common_ctx.delta_rho, common_ctx.g, C, iter_lim);
+		//printf("iterlim %i diff %.8f \n", iter_lim, diff);
+		if (iter_lim) {
+			h = solveForh(S_c_new, H, h, common_ctx.p_ci, 1, common_ctx.delta_rho, common_ctx.g, C);
+		}
+		/*if ((xid == 37 && yid == 70) || isnan(S_c_new))
+		printf("S_c_new: %.15f H %.8f prev_h %.6f h %.6f p_ci %.2f dz %.2f C %.7f xid %i yid %i\n",
+				S_c_new, H, prev_h, h, common_ctx.p_ci, tik_ctx.dz, C, xid, yid);
+		*/
 		global_index(tik_ctx.vol_new.ptr, tik_ctx.vol_new.pitch, xid, yid, noborder)[0] = vol_new;
-		global_index(tik_ctx.vol_old.ptr, tik_ctx.vol_old.pitch, xid, yid, noborder)[0] = vol_old;
+		global_index(tik_ctx.vol_old.ptr, tik_ctx.vol_old.pitch, xid, yid, noborder)[0] = iter_lim;
 		global_index(tik_ctx.h.ptr, tik_ctx.h.pitch, xid, yid, noborder)[0] = h;
     }
 
@@ -643,6 +716,8 @@ __global__ void CoarseMobIntegrationKernel(int gridDimX){
 		computeLambda(lambda_c_and_b, cmi_ctx.p_ci, common_ctx.g, common_ctx.delta_rho, H, height, h, cmi_ctx.dz,
 				nIntervalsForh, k_values, C);
 		if (K != 0){
+			//if (xid == 37 && yid ==70)
+			//	printf("lambda_b %.4f xid: %i yid: %i \n", lambda_c_and_b[1]/K,xid, yid );
 			global_index(cmi_ctx.Lambda_c.ptr, cmi_ctx.Lambda_c.pitch, xid, yid, 0)[0] =  lambda_c_and_b[0]/(K);
 			global_index(cmi_ctx.Lambda_b.ptr, cmi_ctx.Lambda_b.pitch, xid, yid, 0)[0] =  lambda_c_and_b[1]/(K);
 			float s_e = (1-common_ctx.s_c_res-common_ctx.s_b_res)/(1-common_ctx.s_b_res);

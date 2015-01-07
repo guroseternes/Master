@@ -40,6 +40,7 @@ void InitialConditions::computeAllGridBlocks(){
 	computeGridBlock(grid, block, nx, ny, BLOCKDIM_X_FLUX, BLOCKDIM_Y_FLUX);
 	computeGridBlock(grid_flux, block_flux, nx + 2*border, ny + 2*border, BLOCKDIM_X_FLUX,
 			BLOCKDIM_Y_FLUX, TILEDIM_X, TILEDIM_Y);
+	nElements = grid_flux.x*grid_flux.y;
 }
 
 void InitialConditions::createDtVec(){

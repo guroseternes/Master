@@ -96,7 +96,7 @@ void readDtTableFromMATLABFile(const char* filename, float* dt_table, int& size)
 
 mat_t *matfp;
 matvar_t *matvar;
-matfp = Mat_Open(filename, MAT_ACC_RDONLY);
+ matfp = Mat_Open(filename, MAT_ACC_RDONLY);
 if ( NULL == matfp ) {
 	fprintf(stderr,"Error opening MAT file");
 }
@@ -238,6 +238,7 @@ Mat_VarReadDataAll(matfp, matvar);
 nx = matvar->dims[0];
 ny = matvar->dims[1];
 int size = nx*ny;
+printf("Variable name %s", matvar->name);
 memcpy(H, matvar->data,sizeof(float)*size);
 Mat_VarFree(matvar);
 matvar = NULL;

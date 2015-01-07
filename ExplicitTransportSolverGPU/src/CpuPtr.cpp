@@ -92,7 +92,7 @@ CpuPtr_2D::CpuPtr_2D(const CpuPtr_2D& other):nx(other.nx),ny(other.ny),border(ot
 }
 
 CpuPtr_2D::~CpuPtr_2D(){
-	delete [] data;
+	//delete [] data;
 }
 
 float &CpuPtr_2D::operator() (unsigned int i, unsigned int j){

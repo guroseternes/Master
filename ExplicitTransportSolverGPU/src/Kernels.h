@@ -21,7 +21,7 @@ const int TILEDIM_Y = BLOCKDIM_Y_FLUX-2;
 const int BLOCKDIM_X = 8;
 const int BLOCKDIM_Y = 8;
 
-const int TIME_THREADS = 64;
+const int TIME_THREADS = 512;
 
 void setupGPU(CommonArgs* args);
 
