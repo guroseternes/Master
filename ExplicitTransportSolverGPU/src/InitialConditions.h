@@ -60,7 +60,7 @@ public:
 	CpuPtr_2D scaling_parameter;
 
 	//Block and grid
-	dim3 grid, block, block_flux, grid_flux;
+	dim3 grid, block, block_flux, grid_flux, grid_pc, block_pc, grid_pc_bisection, block_pc_bisection;
 	int nElements;
 	float* dt_vector;
 

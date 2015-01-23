@@ -14,6 +14,10 @@
 #include "engine.h"
 #include <memory.h>
 #include <algorithm>
+#include "cudpp.h"
+#include "cudpp_manager.h"
+#include "cudpp_plan.h"
+#include "cudpp_scan.h"
 
 int main() {
 	int nx, ny, nz;
@@ -22,8 +26,8 @@ int main() {
 	float t, tf;
 	int year = 60*60*24*365;
 	bool run = true;
-	char* formation = "utsira";
-	char* formation_data_folder = "Utsira_Data";
+	char* formation = "johansen";
+	char* formation_data_folder = "Johansen_Data";
 	char filename[50];
 	strcpy(filename,formation);
 	strcat (filename, "_dimensions.mat");
@@ -37,8 +41,8 @@ int main() {
 	readDimensionsFromMATLABFile(filename, nx, ny, nz);
 	InitialConditions IC(nx, ny, 5);
 	printf("nx: %i, ny: %i nz: %i dt: %.10f", nx, ny, nz, dt);
-	nx_small = nx/3;
-	ny_small = ny/3;
+	nx_small = nx;
+	ny_small = ny;
 
 	CpuPtr_2D H(nx, ny, 0, true);
 	CpuPtr_2D top_surface(nx, ny, 0, true);
@@ -86,6 +90,7 @@ int main() {
 
 	strcpy(filename, "dt_table.mat");
 	readDtTableFromMATLABFile(filename, dt_table, size_dt_table);
+
 
 	Engine *ep;
 	if (!(ep = engOpen(""))) {
@@ -154,10 +159,11 @@ int main() {
 	FluxKernelArgs flux_kernel_args;
 	TimeIntegrationKernelArgs time_int_kernel_args;
 	TimestepReductionKernelArgs time_red_kernel_args;
+	SolveForhProblemCellsKernelArgs solve_problem_cells_args;
 
 	printf("Cuda error 0.5: %s\n", cudaGetErrorString(cudaGetLastError()));
 	initAllocate(&common_args, &coarse_perm_int_args, &coarse_mob_int_args,
-			&flux_kernel_args, &time_int_kernel_args, &time_red_kernel_args);
+			&flux_kernel_args, &time_int_kernel_args, &time_red_kernel_args, &solve_problem_cells_args);
 
 	h.convertToDoublePointer(h_matlab_matrix);
 	memcpy((void *)mxGetPr(h_matrix), (void *)h_matlab_matrix, sizeof(double)*(nx_small)*(ny_small));
@@ -165,7 +171,6 @@ int main() {
 	printf("Cuda error 1: %s\n", cudaGetErrorString(cudaGetLastError()));
 
 	// Allocate and set data on the GPU
-	GpuPtr_3D pre_compue_satu_device(nx, ny, nz + 1, 0, perm3D.getPtr());
 	GpuPtr_3D perm3D_device(nx, ny, nz + 1, 0, perm3D.getPtr());
 	printf("Cuda error 1.5: %s\n", cudaGetErrorString(cudaGetLastError()));
 	GpuPtr_2D Lambda_c_device(nx, ny, 0, zeros.getPtr());
@@ -202,6 +207,7 @@ int main() {
 	GpuPtr_1D global_dt_device(3, IC.global_time_data);
 	GpuPtr_1D dt_vector_device(IC.nElements, IC.dt_vector);
 
+
 	GpuPtrInt_1D active_block_indexes_device(n_active_blocks,
 			&active_block_indexes[0]);
 
@@ -219,12 +225,6 @@ int main() {
 			K_device.getRawPtr(), perm3D_device.getRawPtr(),
 			nInterval_device.getRawPtr(), IC.dz);
 	callCoarsePermIntegrationKernel(IC.grid, IC.block, &coarse_perm_int_args);
-
-	setTimeIntegrationKernelArgs(&time_int_kernel_args, global_dt_device.getRawPtr(),
-			IC.integral_res,pv_device.getRawPtr(), h_device.getRawPtr(),
-			R_device.getRawPtr(),coarse_satu_device.getRawPtr(),
-			scaling_parameter_C_device.getRawPtr(),
-			vol_old_device.getRawPtr(), vol_new_device.getRawPtr());
 
 	setCoarseMobIntegrationKernelArgs(&coarse_mob_int_args,
 			Lambda_c_device.getRawPtr(), Lambda_b_device.getRawPtr(),
@@ -248,6 +248,75 @@ int main() {
 	setTimestepReductionKernelArgs(&time_red_kernel_args, TIME_THREADS, IC.nElements, global_dt_device.getRawPtr(),
 								   IC.cfl_scale, dt_vector_device.getRawPtr());
 
+
+
+	//CUDPP HERE
+	CUDPPHandle theCudpp;
+	cudppCreate(&theCudpp);
+	//CUDPPManager managerCudpp;
+	//printf("\nCudaMemcpy error: %s", cudaGetErrorString(cudaGetLastError()));
+	CUDPPHandle plan;
+	CUDPPResult res;
+	unsigned int numElements=nx*ny;
+
+	//managerCudpp.getManagerFromHandle(theCudpp);
+
+	CUDPPConfiguration config;
+	config.datatype = CUDPP_INT;
+	config.algorithm = CUDPP_COMPACT;
+	config.options = CUDPP_OPTION_FORWARD;
+
+
+	res = cudppPlan(theCudpp, &plan, config, numElements,1,0);
+
+	if (CUDPP_SUCCESS != res){
+		printf("Error creating CUDPPPlan\n");
+		exit(-1);
+	}
+
+	size_t d_numValidElements;
+	unsigned int* h_isValid;
+	unsigned int* d_isValid;
+	int* h_in;
+	int* d_in;
+	int* d_out;
+	size_t* d_numValid = NULL;
+	h_isValid = new unsigned int[numElements];
+	h_in = new int[numElements];
+	for (int i = 0; i < nx; i++){
+		for (int j = 0; j < ny; j++){
+			h_isValid[nx*j + i] = 0;
+			h_in[nx*j + i] = nx*j + i;
+		}
+	}
+
+	cudaMalloc((void**) &d_isValid, sizeof(unsigned int)*numElements);
+	cudaMalloc((void**) &d_in, sizeof(int)*numElements);
+	cudaMalloc((void**) &d_out, sizeof(int)*numElements);
+	cudaMalloc((void**) &d_numValid, sizeof(size_t));
+	cudaMemcpy(d_isValid, h_isValid, sizeof(unsigned int)*numElements, cudaMemcpyHostToDevice);
+	cudaMemcpy(d_in, h_in, sizeof(int)*numElements, cudaMemcpyHostToDevice);
+
+	printf("\n Error 4: %s", cudaGetErrorString(cudaGetLastError()));
+	size_t numValidElements;
+
+	printf("\nCudaMemcpy error: %s", cudaGetErrorString(cudaGetLastError()));
+
+	setTimeIntegrationKernelArgs(&time_int_kernel_args, global_dt_device.getRawPtr(),
+			IC.integral_res,pv_device.getRawPtr(), h_device.getRawPtr(),
+			R_device.getRawPtr(),coarse_satu_device.getRawPtr(),
+			scaling_parameter_C_device.getRawPtr(),
+			vol_old_device.getRawPtr(), vol_new_device.getRawPtr(),
+			d_isValid, d_in);
+
+
+	setSolveForhProblemCellsKernelArgs(&solve_problem_cells_args, h_device.getRawPtr(),
+									   coarse_satu_device.getRawPtr(), scaling_parameter_C_device.getRawPtr(),
+									   d_out, IC.integral_res, d_numValid);
+
+	printf("\nCudaMemcpy error: %s", cudaGetErrorString(cudaGetLastError()));
+
+
 	//Compute start volume
 	/*
 	callCoarseMobIntegrationKernel(new_sparse_grid, IC.block, IC.grid.x, &coarse_mob_int_args);
@@ -264,13 +333,13 @@ int main() {
 	int iter_outer_loop = 0;
 	int iter_inner_loop = 0;
 	int iter_total = 0;
-	int iter_total_lim = 10;
+	int iter_total_lim = 1000;
 	float time = 0;
 	float injected = 0;
 	int table_index = 1;
-	int stop_inject = 220;
+	int stop_inject = 100;
 	//total time in years
-	float totalTime = 1200;
+	float totalTime = 500;
 	float temp_time_data[3];
 	double time_start = getWallTime();
 	double time_start_iter;
@@ -281,12 +350,7 @@ int main() {
 			iter_inner_loop = 0;
 
 			h_device.download(h.getPtr(), 0, 0, nx, ny);
-			for (int i = 0; i < nx_small; i++){
-				for (int j = 0; j < ny_small; j++){
-					h_small(i,j) = h(i,j);
-				}
-			}
-			h_small.convertToDoublePointer(h_matlab_matrix);
+			h.convertToDoublePointer(h_matlab_matrix);
 			memcpy((void *)mxGetPr(h_matrix), (void *)h_matlab_matrix, sizeof(double)*nx_small*ny_small);
 			engPutVariable(ep, "h_matrix", h_matrix);
 			if (time >= stop_inject){
@@ -301,28 +365,11 @@ int main() {
 			flux_east_matrix = engGetVariable(ep, "east_flux");
 			flux_north_matrix = engGetVariable(ep, "north_flux");
 			source_matrix = engGetVariable(ep, "source");
-			/*
+
 			memcpy((void *)flux_east.getPtr(), (void *)mxGetPr(flux_east_matrix), sizeof(float)*(nx+2*IC.border)*(ny+2*IC.border));
 			memcpy((void *)flux_north.getPtr(), (void *)mxGetPr(flux_north_matrix), sizeof(float)*(nx+2*IC.border)*(ny+2*IC.border));
 			memcpy((void *)source.getPtr(), (void *)mxGetPr(source_matrix), sizeof(float)*nx*ny);
-			*/
-			memcpy((void *)flux_east_small.getPtr(), (void *)mxGetPr(flux_east_matrix), sizeof(float)*(nx_small+2*IC.border)*(ny_small+2*IC.border));
-			memcpy((void *)flux_north_small.getPtr(), (void *)mxGetPr(flux_north_matrix), sizeof(float)*(nx_small+2*IC.border)*(ny_small+2*IC.border));
-			memcpy((void *)source_small.getPtr(), (void *)mxGetPr(source_matrix), sizeof(float)*nx_small*ny_small);
-			int k,l;
-			for (int i = 0; i < nx_small; i++){
-				for (int j = 0; j < ny_small; j++){
-					for (int m = 0; m < 3; m++){
-						for (int o = 0; o < 3; o++){
-							source(i+(m*nx_small),j+(o*ny_small)) = source_small(i,j);
-							k = i + 1;
-							l = j + 1;
-							flux_north(k+(m*nx_small),l+(o*ny_small)) = flux_north_small(k,l);
-							flux_east(k+(m*nx_small),l+(o*ny_small)) = flux_east_small(k,l);
-						}
-					}
-				}
-			}
+
 			source_device.upload(source.getPtr(), 0, 0, nx, ny);
 			U_x_device.upload(flux_east.getPtr(), 0, 0, nx+2*IC.border, ny+2*IC.border);
 			U_y_device.upload(flux_north.getPtr(), 0, 0,nx+2*IC.border, ny+2*IC.border);
@@ -334,7 +381,7 @@ int main() {
 
 				callTimestepReductionKernel(TIME_THREADS, &time_red_kernel_args);
 
-				/*
+
 
 				if (iter_outer_loop < 1 && iter_inner_loop == 2){
 					IC.global_time_data[0] = 25066810;
@@ -344,18 +391,16 @@ int main() {
 
 
 				if (iter_outer_loop < 1 && iter_inner_loop == 1){
-					IC.global_time_data[0] = 3000000;//25413443.94;
-					IC.global_time_data[1] += 3000000;
+					IC.global_time_data[0] = 25413443.94;
+					IC.global_time_data[1] += 25413443.94;;
 					cudaMemcpy(global_dt_device.getRawPtr(), IC.global_time_data, sizeof(float)*3, cudaMemcpyHostToDevice);
 				}
 
-				*/
 				if (iter_outer_loop < 1 && iter_inner_loop == 0){
-					IC.global_time_data[0] = 300000;
-					IC.global_time_data[1] += 300000;
+					IC.global_time_data[0] = 12592000;//300000;
+					IC.global_time_data[1] += 12592000; //300000;
 					cudaMemcpy(global_dt_device.getRawPtr(), IC.global_time_data, sizeof(float)*3, cudaMemcpyHostToDevice);
 				}
-
 
 				/*
 				IC.global_time_data[0] = (float)dt_table[table_index];//157680000/20;
@@ -364,11 +409,25 @@ int main() {
 				 */
 				callTimeIntegration(new_sparse_grid, IC.block, IC.grid.x, &time_int_kernel_args);
 
+				//cudppCompact(plan, d_out, d_numValid, d_in, d_isValid, numElements);
+
+				//cudaMemcpy(h_in, d_out, sizeof(int)*numElements, cudaMemcpyDeviceToHost);
+				/*printf("Valid before");
+				std::cout<<numValidElements;
+				cudaMemcpy(&numValidElements, d_numValid, sizeof(size_t),
+				cudaMemcpyDeviceToHost);
+				printf("\n Valid after");
+				std::cout<<numValidElements;
+				*/
+				//callSolveForhProblemCells(IC.grid_pc, IC.block_pc, &solve_problem_cells_args);
+				//callSolveForhProblemCellsBisection(IC.grid_pc_bisection, IC.block_pc_bisection, &solve_problem_cells_args);
+
 				cudaMemcpy(IC.global_time_data, global_dt_device.getRawPtr(), sizeof(float)*3, cudaMemcpyDeviceToHost);
 
-				//injected += IC.global_time_data[0]*0.923756*13;
+				if (time < stop_inject)
+					//injected += IC.global_time_data[0]*0.923756*15;
 				//injected += IC.global_time_data[0]*source(24,40)*6;
-				//injected += IC.global_time_data[0]*source(50,50);
+					injected += IC.global_time_data[0]*source(50,50);
 
 				t += IC.global_time_data[0];
 
@@ -381,11 +440,11 @@ int main() {
 			}
 			total_time_gpu += getWallTime() - time_start_iter;
 			printf("Total time in years: %.3f time in this round %.3f timestep %.3f GPU time %.3f time per iter %.8f \n", time, t, IC.global_time_data[0], getWallTime() - time_start_iter, (getWallTime() - time_start_iter)/iter_inner_loop);
-			if (time < 1000){
+			/*if (time < 1000){
 				total_time_gpu = 0;
 				iter_total = 0;
 			}
-
+			*/
 
 
 			//printf("Finished Iter Total time in years: %.3f time in this round %.3f timestep %.3f\n", totTime, global_time_data[1]/(60*60*24), global_time_data[0]/(60*60*24));
@@ -399,10 +458,10 @@ int main() {
 	printf("Elapsed time program: %.5f gpu part: %.5f", getWallTime() - time_start, total_time_gpu);
     engClose(ep);
 
-	vol_new_device.download(zeros.getPtr(), 0, 0, nx, ny);
+	coarse_satu_device.download(zeros.getPtr(), 0, 0, nx, ny);
 	zeros.printToFile(matlab_file);
     //h_device.download(zeros.getPtr(), 0, 0, nx, ny);
-    U_x_device.download(zeros.getPtr(), 0, 0, nx, ny);
+    h_device.download(zeros.getPtr(), 0, 0, nx, ny);
 	zeros.printToFile(matlab_file_2);
 
 	vol_new_device.download(zeros.getPtr(), 0, 0, nx, ny);

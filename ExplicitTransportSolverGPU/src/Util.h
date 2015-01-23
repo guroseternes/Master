@@ -9,7 +9,8 @@
 #include <vector>
 #include "math.h"
 
-
+void computeGridBlock(dim3& grid, dim3& block, int NX, int block_x);
+void computeGridBlockBisection(dim3& grid, dim3& block, int NX, int n_cells_per_block);
 void computeGridBlock(dim3& grid, dim3& block, int NX, int NY, int block_x, int block_y);
 void computeGridBlock(dim3& grid, dim3& block, int NX, int NY, int block_x, int block_y, int tile_x, int tile_y);
 
@@ -55,11 +56,14 @@ void setFluxKernelArgs(FluxKernelArgs* args,
 void setTimeIntegrationKernelArgs(TimeIntegrationKernelArgs* args, float* global_dt, float dz,
 								  GpuRawPtr pv, GpuRawPtr h, GpuRawPtr F,
 								  GpuRawPtr S_c, GpuRawPtr scaling_para_C,
-								  GpuRawPtr vol_old, GpuRawPtr vol_new);
+								  GpuRawPtr vol_old, GpuRawPtr vol_new,
+								  unsigned int* d_isValid, int* d_in);
 
 void setTimestepReductionKernelArgs(TimestepReductionKernelArgs* args, int nThreads, int nElements,
 									float* global_dt, float cfl_scale, float* dt_vec);
 
+void setSolveForhProblemCellsKernelArgs(SolveForhProblemCellsKernelArgs* args, GpuRawPtr h,
+									    GpuRawPtr S_c, GpuRawPtr scaling_parameter_C, int* d_out, float dz, size_t* d_numValid);
 
 float computeBrineSaturation(float p_cap, float C, float s_b_res);
 

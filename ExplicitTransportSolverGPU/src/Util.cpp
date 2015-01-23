@@ -1,6 +1,18 @@
 #include "Util.h"
 #include "Kernels.h"
 
+
+void computeGridBlockBisection(dim3& grid, dim3& block, int NX, int n_cells_per_block){
+        int num_threads = NX*32;
+        block.x = n_cells_per_block*32;
+        grid.x = (NX + block.x - 1)/block.x;
+}
+
+void computeGridBlock(dim3& grid, dim3& block, int NX, int block_x){
+        block.x = block_x;
+        grid.x = (NX + block_x - 1)/block_x;
+}
+
 void computeGridBlock(dim3& grid, dim3& block, int NX, int NY, int block_x, int block_y){
         block.x = block_x;
         block.y = block_y;
@@ -180,7 +192,7 @@ void setFluxKernelArgs(FluxKernelArgs* args,
 void setTimeIntegrationKernelArgs(TimeIntegrationKernelArgs* args, float* global_dt, float dz,
 								  GpuRawPtr pv, GpuRawPtr h, GpuRawPtr F,
 								  GpuRawPtr S_c, GpuRawPtr scaling_para_C,
-								  GpuRawPtr vol_old, GpuRawPtr vol_new){
+								  GpuRawPtr vol_old, GpuRawPtr vol_new, unsigned int* d_isValid, int* d_in){
 	args->global_dt = global_dt;
 	args->vol_old = vol_old;
 	args->vol_new = vol_new;
@@ -190,6 +202,9 @@ void setTimeIntegrationKernelArgs(TimeIntegrationKernelArgs* args, float* global
 	args->R = F;
 	args->S_c = S_c;
 	args->scaling_parameter_C = scaling_para_C;
+
+	args->d_in = d_in;
+	args->d_isValid = d_isValid;
 }
 
 void setTimestepReductionKernelArgs(TimestepReductionKernelArgs* args, int nThreads, int nElements,
@@ -199,6 +214,18 @@ void setTimestepReductionKernelArgs(TimestepReductionKernelArgs* args, int nThre
 	args->global_dt = global_dt;
 	args->cfl_scale = cfl_scale;
 	args->dt_vec = dt_vec;
+}
+
+void setSolveForhProblemCellsKernelArgs(SolveForhProblemCellsKernelArgs* args, GpuRawPtr h,
+									    GpuRawPtr S_c, GpuRawPtr scaling_parameter_C,
+									    int* d_out, float dz, size_t* d_numValid){
+
+	args->dz = dz;
+	args->h = h;
+	args->S_c = S_c;
+	args->scaling_parameter_C = scaling_parameter_C;
+	args->d_out = d_out;
+	args->d_numValid = d_numValid;
 }
 
 float computeBrineSaturation(float p_cap, float C, float s_b_res){

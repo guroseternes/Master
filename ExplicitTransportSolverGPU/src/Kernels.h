@@ -21,7 +21,11 @@ const int TILEDIM_Y = BLOCKDIM_Y_FLUX-2;
 const int BLOCKDIM_X = 8;
 const int BLOCKDIM_Y = 8;
 
-const int TIME_THREADS = 512;
+const int TIME_THREADS = 64;
+
+const int N_CELLS_PER_BLOCK = 4;
+
+const int PROBLEM_CELL_THREADS = 64;
 
 void setupGPU(CommonArgs* args);
 
@@ -31,11 +35,16 @@ void callCoarsePermIntegrationKernel(dim3 grid, dim3 block, CoarsePermIntegratio
 
 void initAllocate(CommonArgs* args1, CoarsePermIntegrationKernelArgs* args2,
 				  CoarseMobIntegrationKernelArgs* args3, FluxKernelArgs* args4,
-				  TimeIntegrationKernelArgs* args5, TimestepReductionKernelArgs* args6);
+				  TimeIntegrationKernelArgs* args5, TimestepReductionKernelArgs* args6,
+				  SolveForhProblemCellsKernelArgs* args7);
 
 void callFluxKernel(dim3 grid, dim3 block, int gridDimX, FluxKernelArgs* args);
 
 void callTimeIntegration(dim3 grid, dim3 block, int gridDimX, TimeIntegrationKernelArgs* args);
+
+void callSolveForhProblemCells(dim3 grid, dim3 block, SolveForhProblemCellsKernelArgs* args);
+
+void callSolveForhProblemCellsBisection(dim3 grid, dim3 block, SolveForhProblemCellsKernelArgs* args);
 
 void callTimestepReductionKernel(int nThreads, TimestepReductionKernelArgs* args);
 

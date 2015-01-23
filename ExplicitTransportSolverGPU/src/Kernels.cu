@@ -6,17 +6,20 @@ __constant__ TimeIntegrationKernelArgs tik_ctx;
 __constant__ CoarsePermIntegrationKernelArgs cpi_ctx;
 __constant__ CoarseMobIntegrationKernelArgs cmi_ctx;
 __constant__ TimestepReductionKernelArgs trk_ctx;
+__constant__ SolveForhProblemCellsKernelArgs spc_ctx;
 
 
 void initAllocate(CommonArgs* args1, CoarsePermIntegrationKernelArgs* args2,
 				  CoarseMobIntegrationKernelArgs* args3, FluxKernelArgs* args4,
-				  TimeIntegrationKernelArgs* args5, TimestepReductionKernelArgs* args6){
+				  TimeIntegrationKernelArgs* args5, TimestepReductionKernelArgs* args6,
+				  SolveForhProblemCellsKernelArgs* args7){
 	cudaHostAlloc(&args1, sizeof(CommonArgs), cudaHostAllocWriteCombined);
 	cudaHostAlloc(&args2, sizeof(CoarsePermIntegrationKernelArgs), cudaHostAllocWriteCombined);
 	cudaHostAlloc(&args3, sizeof(CoarseMobIntegrationKernelArgs), cudaHostAllocWriteCombined);
 	cudaHostAlloc(&args4, sizeof(FluxKernelArgs), cudaHostAllocWriteCombined);
 	cudaHostAlloc(&args5, sizeof(TimeIntegrationKernelArgs), cudaHostAllocWriteCombined);
 	cudaHostAlloc(&args6, sizeof(TimeIntegrationKernelArgs), cudaHostAllocWriteCombined);
+	cudaHostAlloc(&args7, sizeof(SolveForhProblemCellsKernelArgs), cudaHostAllocWriteCombined);
 }
 
 void setupGPU(CommonArgs* args){
@@ -29,6 +32,10 @@ inline __device__ float* global_index(float* base, unsigned int pitch, int x, in
 
 inline __device__ float* global_index(cudaPitchedPtr ptr, int x, int y, int z, int border) {
         return (float*) ((char*) (ptr.ptr+(x+border)*(ptr.ysize)*ptr.pitch)) + (y+border)*(ptr.pitch/sizeof(float)) + z;
+}
+
+inline __device__ int sign(float val) {
+    return (0 < val) - (val < 0);
 }
 
 //NORMAL
@@ -445,7 +452,7 @@ inline __device__ void higherResolutionIterationWithShift(float H, float& z, flo
 	firstIter = false;
 }
 
-inline __device__ float F(float S_c_new, float H, float h, float p_ci, float dz, float delta_rho, float g, float C){
+inline __device__ float F_wihout_opt(float S_c_new, float H, float h, float p_ci, float dz, float delta_rho, float g, float C){
 	float height = fminf(H,h);
 	int n = ceil(height/dz);
 	float curr_p_cap = p_ci + g*(delta_rho)*(dz*0-h);
@@ -468,37 +475,231 @@ inline __device__ float F(float S_c_new, float H, float h, float p_ci, float dz,
 
 }
 
-inline __device__ float solveForhNewton(float S_c_new, float H, float previous_h, float p_ci, float dz,
-		                                float delta_rho, float g, float C, bool &iter_lim){
-	//float h_init = fmaxf(1,previous_h);
-	float h_old = fmaxf(1,previous_h);
-	h_old = fmaxf(h_old, S_c_new);
-	float h_new = 0;
+inline __device__ float add_to_sum(float sum_c, float old_value, float diff, float dz, float C){
+	int sign_diff = sign(diff);
+	int old_n = ceil(abs(diff)/dz);
+	int n = min(old_n, 1000);
+	if (n > 600)
+		printf("ALARM ADD TO%i C %.3f h_old %.3f h_new %.3f \n", old_n, C, old_value, diff);
+	dz = sign_diff*dz;
+	float curr_satu_c;
+	float prev_satu_c = computeSatu(old_value, C);
+	if (n>0){
+		for (int i=1; i < n; i++){
+			curr_satu_c = computeSatu(old_value + dz*i, C);
+			sum_c = sum_c + dz*0.5*(curr_satu_c + prev_satu_c);
+			prev_satu_c = curr_satu_c;
+		}
+	}
+	curr_satu_c = computeSatu(old_value+diff, C);
+	sum_c = sum_c + 0.5*(prev_satu_c+curr_satu_c)*(diff-dz*(n-1));
+	return sum_c;
+}
+
+inline __device__ float add_to_sum_parallel(float sum_c, float old_value, float diff, float dz, float C,
+											int local_tid, float (&shared_mem)[N_CELLS_PER_BLOCK][32],
+											int cell_block_id){
+	int sign_diff = sign(diff);
+	int old_n = ceil(abs(diff)/dz);
+	int n = min(old_n, 1000);
+	if (n==1000)
+		printf("ALARM %i \n", old_n);
+	dz = sign_diff*dz;
+	int local_n = (n + 32 - 1)/32;
+	//if (local_tid == 1)
+	//	printf("local_n %i diff %.4f C%.4f\n", local_n, diff, C);
+	int local_start = min(local_tid*local_n, n);
+	int local_end = min(local_start + (local_n+1), n);
+	float local_sum_c = 0;
+	float curr_satu_c;
+	float prev_satu_c = computeSatu(old_value+local_start*dz, C);
+	if (local_n>0){
+		for (int i=(local_start+1); i < local_end; i++){
+			curr_satu_c = computeSatu(old_value + dz*i, C);
+			local_sum_c = local_sum_c + dz*0.5*(curr_satu_c + prev_satu_c);
+			prev_satu_c = curr_satu_c;
+		}
+	}
+	shared_mem[cell_block_id][local_tid] = local_sum_c;
+	if (local_tid < 16){
+		shared_mem[cell_block_id][local_tid] += shared_mem[cell_block_id][local_tid + 16];
+		shared_mem[cell_block_id][local_tid] += shared_mem[cell_block_id][local_tid + 8];
+		shared_mem[cell_block_id][local_tid] += shared_mem[cell_block_id][local_tid + 4];
+		shared_mem[cell_block_id][local_tid] += shared_mem[cell_block_id][local_tid + 2];
+		shared_mem[cell_block_id][local_tid] += shared_mem[cell_block_id][local_tid + 1];
+	}
+	prev_satu_c = computeSatu(old_value+(n-1)*dz, C);
+	curr_satu_c = computeSatu(old_value+diff, C);
+	float interval_end = 0.5*(prev_satu_c+curr_satu_c)*(diff-dz*(n-1));
+	return (shared_mem[cell_block_id][0]+interval_end + sum_c);
+}
+inline __device__ float add_to_bottom_parallel(float sum_c, float old_value, float diff, float dz, float C,
+											int local_tid, float (&shared_mem)[N_CELLS_PER_BLOCK][32],
+											int cell_block_id){
+	int sign_diff = sign(diff);
+	int old_n = ceil(abs(diff)/dz);
+	int n = min(old_n, 1000);
+	if (n==1000)
+		printf("ALARM %i \n", old_n);
+
+	dz = sign_diff*dz;
+	int local_n = (n + 32 - 1)/32;
+	int local_start = min(local_tid*local_n, n);
+	int local_end = min(local_start + (local_n+1), n);
+	float local_sum_c = 0;
+	float curr_satu_c;
+	float prev_satu_c = computeSatu(old_value+local_start*dz, C);
+	if (local_n>0){
+		for (int i=(local_start+1); i < local_end; i++){
+			curr_satu_c = computeSatu(old_value + dz*i, C);
+			local_sum_c = local_sum_c - dz*0.5*(curr_satu_c + prev_satu_c);
+			prev_satu_c = curr_satu_c;
+		}
+	}
+	shared_mem[cell_block_id][local_tid] = local_sum_c;
+	if (local_tid < 16){
+		shared_mem[cell_block_id][local_tid] += shared_mem[cell_block_id][local_tid + 16];
+		shared_mem[cell_block_id][local_tid] += shared_mem[cell_block_id][local_tid + 8];
+		shared_mem[cell_block_id][local_tid] += shared_mem[cell_block_id][local_tid + 4];
+		shared_mem[cell_block_id][local_tid] += shared_mem[cell_block_id][local_tid + 2];
+		shared_mem[cell_block_id][local_tid] += shared_mem[cell_block_id][local_tid + 1];
+	}
+	prev_satu_c = computeSatu(old_value+(n-1)*dz, C);
+	curr_satu_c = computeSatu(old_value+diff, C);
+
+	float interval_end = 0.5*(prev_satu_c+curr_satu_c)*(diff-dz*(n-1));
+	return (shared_mem[cell_block_id][0]-interval_end + sum_c);
+}
+
+
+inline __device__ float add_to_bottom(float sum_c, float old_value, float diff, float dz, float C){
+	int sign_diff = sign(diff);
+	int old_n = ceil(abs(diff)/dz);
+	int n = min(old_n, 400);
+	if (n==400)
+		printf("ALARM BOTTOM %i C %.3f\n", old_n, C);
+	//printf("Newton n bottom %i \n", n);
+	dz = sign_diff*dz;
+	float curr_satu_c;
+	float prev_satu_c = computeSatu(old_value, C);
+	if (n>0){
+		for (int i=1; i < n; i++){
+			curr_satu_c = computeSatu(old_value + dz*i, C);
+			sum_c = sum_c - dz*0.5*(curr_satu_c + prev_satu_c);
+			prev_satu_c = curr_satu_c;
+		}
+	}
+	curr_satu_c = computeSatu(old_value+diff, C);
+	sum_c = sum_c - 0.5*(prev_satu_c+curr_satu_c)*(diff-dz*(n-1));
+	return sum_c;
+}
+
+inline __device__ float F(float S_c_new, float H, float h, float dz, float C,
+						  float &cut_off_old, float &h_old, float &sum){
+	float cut_off = fmaxf(0,h-H);
+	float cut_diff = cut_off-cut_off_old;
+	float h_diff = h-h_old;
+	//printf("sum before bottom ")
+	sum = add_to_bottom(sum, cut_off_old, cut_diff, dz, C);
+	sum = add_to_sum(sum, h_old, h_diff, dz, C);
+	h_old = h;
+	cut_off_old = cut_off;
+	return (S_c_new - sum);
+}
+
+inline __device__ float F_parallel_new(float S_c_new, float H, float h, float dz, float C,
+		  	  	  	  	               float &cut_off_old, float &h_old, float &sum,
+		  	  	  	  	               float (&shared_mem)[N_CELLS_PER_BLOCK][32], int local_tid, int cell_block_id){
+	float cut_off = fmaxf(0,h-H);
+	float cut_diff = cut_off-cut_off_old;
+	float h_diff = h-h_old;
+	sum = add_to_bottom_parallel(sum, cut_off_old, cut_diff, dz, C, local_tid, shared_mem, cell_block_id);
+	sum = add_to_sum_parallel(sum, h_old, h_diff, dz, C, local_tid, shared_mem, cell_block_id);
+	h_old = h;
+	cut_off_old = cut_off;
+	return (S_c_new - sum);
+
+}
+
+inline __device__ void F_parallel(float S_c_new, float H, float h, float dz, float C, int pre_compute_n,
+		float pre_compute_sum, float (&shared_mem)[N_CELLS_PER_BLOCK][32], int local_tid, int cell_block_id,
+		float& z0){
+	float height = fminf(H,h);
+	int n = ceil(height/dz);
+	int max_n = ceil(H/dz);
+	int n_evaluations = n;
+	if (h>H){
+		z0 = h-H;
+	} else {
+		z0 = 0;
+	}
+	float local_sum_c = 0;
+	float sum_c = 0;
+	int start = 0;
+	if (n > pre_compute_n && n < max_n){
+		start = pre_compute_n;
+		sum_c = pre_compute_sum;
+		n_evaluations = n-pre_compute_n;
+	}
+	int local_n = (n_evaluations + 32 - 1)/32;
+	int local_start = min(start + local_tid*local_n, n);
+	int local_end = min(local_start + (local_n+1), n);
+	float curr_satu_c = computeSatu(z0 + local_start*dz, C);
+	float prev_satu_c = curr_satu_c;
+	local_start ++;
+	if (local_n>0){
+		for (int i = local_start; i < local_end; i++){
+			curr_satu_c = computeSatu(z0+dz*i, C);
+			local_sum_c += dz*0.5*(curr_satu_c+prev_satu_c);
+			prev_satu_c = curr_satu_c;
+		}
+	}
+	shared_mem[cell_block_id][local_tid] = local_sum_c;
+	if (local_tid < 16){
+		shared_mem[cell_block_id][local_tid] += shared_mem[cell_block_id][local_tid + 16];
+		shared_mem[cell_block_id][local_tid] += shared_mem[cell_block_id][local_tid + 8];
+		shared_mem[cell_block_id][local_tid] += shared_mem[cell_block_id][local_tid + 4];
+		shared_mem[cell_block_id][local_tid] += shared_mem[cell_block_id][local_tid + 2];
+		shared_mem[cell_block_id][local_tid] += shared_mem[cell_block_id][local_tid + 1];
+		shared_mem[cell_block_id][local_tid] += sum_c;
+	}
+}
+
+
+inline __device__ float solveForhNewton(float S_c_new, float S_c_old, float H, float previous_h, float p_ci, float dz,
+		                                float delta_rho, float g, float C, int &iter, int max_iter){
+	float h_new = fmaxf(0.01,previous_h);
+	h_new = fmaxf(h_new, S_c_new);
+	float h_old = 0;
+	float cut_off_old = 0;
+	float sum_c = 0;
 	float e = 1000;
 	float TOL = 0.000005;
 	float F_h_old;
 	float F_deriv_h_old;
-	int iter = 0;
-	int max_iter = 4;
-	if (S_c_new == 0)
-			return 0;
+	float eps = TOL/100;
+	if (abs(S_c_new) < eps ){
+		return 0;
+	}
 	while (e > TOL && iter < max_iter){
-		F_h_old = F(S_c_new, H, h_old, p_ci, dz, delta_rho, g, C);
-		if (h_old <= H) {
-			F_deriv_h_old = -computeSatu(h_old, C);
+		if (h_new <= H) {
+			F_deriv_h_old = -computeSatu(h_new, C);
 		} else {
-			F_deriv_h_old = -computeSatu(h_old, C) + computeSatu(h_old-H,C);
+			F_deriv_h_old = -computeSatu(h_new, C) + computeSatu(h_new-H,C);
 		}
+		if (F_deriv_h_old == 0){
+			iter = max_iter;
+			return 0;
+		}
+		F_h_old = F(S_c_new, H, h_new, dz, C, cut_off_old, h_old, sum_c);
 		h_new = h_old - F_h_old/F_deriv_h_old;
+		//if (h_new < 0)
+		//	printf("Negative h_new iter %i S_c_new %.7f S_c_old %.7f\n", iter, S_c_new, S_c_old);
 		e = abs(h_new - h_old);
-		//if (print)
-		//	printf("h_old %.10f F_deriv_h_old %.10f F_h_old %.10f e %.10f \n", h_old, F_deriv_h_old, F_h_old,e);
-		h_old = h_new;
 		iter++;
 	}
-	if (iter == max_iter)
-			iter_lim = true;
-	//printf("S_c_new %.3f H %.3f h %.3f h_init %.3f iters %i\n", S_c_new/H, H, h_old, h_init, iter);
+	if (e < TOL)
+		iter = min(max_iter-1, iter);
 	return h_new;
 }
 
@@ -567,36 +768,165 @@ __global__ void TimeIntegrationKernel(int gridDimX){
 			vol_new = pv*S_c_new;
 		}
 		*/
-		float diff = S_c_new-S_c_old;
 		global_index(tik_ctx.S_c.ptr, tik_ctx.S_c.pitch, xid, yid, noborder)[0] = S_c_new;
 		float C = global_index(tik_ctx.scaling_parameter_C.ptr, tik_ctx.scaling_parameter_C.pitch,
 							   xid, yid, 0)[0];
-
-		/*if (xid == 37 && yid == 70){
-			printf("Satu %.3f xid: %i yid: %i \n", S_c_new/H, xid, yid);
-		}
-		*/
-
 		float prev_h = global_index(tik_ctx.h.ptr, tik_ctx.h.pitch, xid, yid, noborder)[0];
-		bool iter_lim = false;
-		h  = solveForhNewton(S_c_new, H, prev_h, common_ctx.p_ci, 1, common_ctx.delta_rho, common_ctx.g, C, iter_lim);
-
-		//if ((xid == 18 && yid == 40))
-		//	print = true;
-		//h  = solveForhNewton(S_c_new, H, prev_h, common_ctx.p_ci, 1, common_ctx.delta_rho, common_ctx.g, C, iter_lim);
-		//printf("iterlim %i diff %.8f \n", iter_lim, diff);
-		if (iter_lim) {
-			h = solveForh(S_c_new, H, h, common_ctx.p_ci, 1, common_ctx.delta_rho, common_ctx.g, C);
+		int iter= 0;
+		int iter_lim = 8;
+		/*
+		h  = solveForhNewton(S_c_new, S_c_old, H, prev_h, common_ctx.p_ci, 1, common_ctx.delta_rho, common_ctx.g, C, iter, iter_lim);
+		/*if (xid == 83 && yid== 145 ){
+			printf("prev_h %.4f h %.4f H %.5f S_c_new %.5f C %.5f xid %i yid%i \n", prev_h, h, H, S_c_new, C, xid, yid);
 		}
-		/*if ((xid == 37 && yid == 70) || isnan(S_c_new))
-		printf("S_c_new: %.15f H %.8f prev_h %.6f h %.6f p_ci %.2f dz %.2f C %.7f xid %i yid %i\n",
-				S_c_new, H, prev_h, h, common_ctx.p_ci, tik_ctx.dz, C, xid, yid);
+
+		if (iter >= iter_lim){
+			tik_ctx.d_isValid[common_ctx.nx*yid +xid] = 1;
+		} else {
+			tik_ctx.d_isValid[common_ctx.nx*yid +xid] = 0;
+		}
 		*/
+		h = solveForh(S_c_new, H, 3, common_ctx.p_ci, tik_ctx.dz, common_ctx.delta_rho, common_ctx.g, C);
+
 		global_index(tik_ctx.vol_new.ptr, tik_ctx.vol_new.pitch, xid, yid, noborder)[0] = vol_new;
-		global_index(tik_ctx.vol_old.ptr, tik_ctx.vol_old.pitch, xid, yid, noborder)[0] = iter_lim;
+		if (isnan(S_c_new)){
+			printf("prev_h %.4f h %.4f H %.5f S_c_new %.5f C %.5f xid %i yid%i \n", prev_h, h, H, S_c_new, C, xid, yid);
+		}
+		global_index(tik_ctx.vol_old.ptr, tik_ctx.vol_old.pitch, xid, yid, noborder)[0] = iter;
 		global_index(tik_ctx.h.ptr, tik_ctx.h.pitch, xid, yid, noborder)[0] = h;
     }
 
+}
+
+/*inline __device__ float solveForhBisection(float S_c_new, float H, float previous_h, float p_ci, float dz,
+		                                float delta_rho, float g, float C, int &iter, int max_iter){
+	float TOL = 0.000005;
+	float l_cap = -((C/sqrt(common_ctx.s_b_res))-C)/(delta_rho*g);
+	float a = 0;
+	float midpoint;
+	float b = H + l_cap;
+	float F_a = S_c_new;
+	float pre_compute_sum = 0;
+	int pre_compute_n = 0;
+	float F_b = F(S_c_new, H, b, p_ci, dz, delta_rho, g, C, pre_compute_sum, pre_compute_n);
+	pre_compute_sum = 0;
+	pre_compute_n = 0;
+	float eps = TOL/100;
+	if (abs(S_c_new) < eps ){
+		return 0;
+	}
+	float F_mid = 100;
+	while ( ((b-a)*0.5) > TOL && iter < max_iter && F_mid != 0){
+		midpoint = (a+b)*0.5;
+		F_mid = F(S_c_new, H, midpoint, p_ci, dz, delta_rho, g, C, pre_compute_sum, pre_compute_n);
+		if (sign(F_mid) == sign(F_a)){
+			a = midpoint;
+			F_a = F_mid;
+		}  else {
+			b = midpoint;
+			F_b = F_mid;
+		}
+		iter++;
+	}
+	return midpoint;
+}*/
+
+__global__ void solveForhProblemCellsBruteForce(){
+	size_t threadid = blockIdx.x*blockDim.x + threadIdx.x;
+	if (threadid > spc_ctx.d_numValid[0])
+		return;
+	int xid = spc_ctx.d_out[threadid] % common_ctx.nx;
+	int yid = spc_ctx.d_out[threadid] / (int) common_ctx.nx;
+	int noborder = 0;
+
+    float S_c_new = global_index(spc_ctx.S_c.ptr, spc_ctx.S_c.pitch, xid, yid, noborder)[0];
+	float C = global_index(spc_ctx.scaling_parameter_C.ptr, spc_ctx.scaling_parameter_C.pitch,
+						   xid, yid, 0)[0];
+    float H = global_index(common_ctx.H.ptr, common_ctx.H.pitch, xid, yid, noborder)[0];
+
+    float h = solveForh(S_c_new, H, 3, common_ctx.p_ci, spc_ctx.dz, common_ctx.delta_rho, common_ctx.g, C);
+    global_index(spc_ctx.h.ptr, spc_ctx.h.pitch, xid, yid, noborder)[0] = h;
+
+}
+__global__ void solveForhProblemCellsBisectionNew(){
+	size_t thread_id = blockIdx.x*blockDim.x + threadIdx.x;
+	size_t cell_id = thread_id/32;
+	if (cell_id > spc_ctx.d_numValid[0])
+		return;
+	int cell_block_id = cell_id % N_CELLS_PER_BLOCK;
+	int local_tid = thread_id % 32;
+	int xid = spc_ctx.d_out[cell_id] % common_ctx.nx;
+	int yid = spc_ctx.d_out[cell_id] / (int) common_ctx.nx;
+	int noborder = 0;
+
+    float S_c_new = global_index(spc_ctx.S_c.ptr, spc_ctx.S_c.pitch, xid, yid, noborder)[0];
+	float C = global_index(spc_ctx.scaling_parameter_C.ptr, spc_ctx.scaling_parameter_C.pitch,
+						   xid, yid, 0)[0];
+    float H = global_index(common_ctx.H.ptr, common_ctx.H.pitch, xid, yid, noborder)[0];
+
+	if (S_c_new == 0){
+		global_index(spc_ctx.h.ptr, spc_ctx.h.pitch, xid, yid, noborder)[0] = 0;
+		return;
+	}
+    __shared__ float shared_mem[N_CELLS_PER_BLOCK][32];
+
+    // BISECTION METHOD
+	float eps = 0.00005;
+	float l_cap = -((C/sqrt(common_ctx.s_b_res))-C)/(common_ctx.delta_rho*common_ctx.g);
+	float a = S_c_new;
+	float b = H + l_cap;
+	int iter = 0;
+	int max_iter = 50;
+	float F_mid =100;
+	float midpoint;
+	float cut_off_old = 0;
+	float sum = 0;
+	float h_old = 0;
+	if (abs(S_c_new) < eps ){
+		 global_index(spc_ctx.h.ptr, spc_ctx.h.pitch, xid, yid, noborder)[0] = 0;
+		 return;
+	}
+	float F_a = F_parallel_new(S_c_new, H, a, spc_ctx.dz, C, cut_off_old,
+			       h_old, sum, shared_mem, local_tid, cell_block_id);
+	/*if (local_tid == 1 && xid == 83 && yid== 145){
+		printf("iterations %i S_c %.20f h %.5f H %.5f C: %.5f sum: %.5f F_b: %.5f, xid %i yid %i tid %i\n", iter, S_c_new, b, H, C, sum, F_b, xid, yid, thread_id);
+	}
+	*/
+	while ( ((b-a)*0.5) > eps && iter < max_iter && abs(F_mid) > eps ){
+		/*if (local_tid == 1 && xid == 77 && yid == 143){
+			printf("iterations %i S_c %.20f h %.5f H %.5f C: %.5f sum: %.5f, xid %i yid %i tid %i\n", iter, S_c_new, midpoint, H, C, sum, xid, yid, thread_id);
+		}
+		*/
+		midpoint = (a+b)*0.5;
+		F_mid = F_parallel_new(S_c_new, H, midpoint, spc_ctx.dz, C, cut_off_old,
+			       h_old, sum, shared_mem, local_tid, cell_block_id);
+		if (sign(F_mid) == sign(F_a)){
+			a = midpoint;
+			F_a = F_mid;
+		}  else {
+			b = midpoint;
+			//F_b = F_mid;
+		}
+		iter++;
+	}
+	/*if (iter > 20 && local_tid == 0){
+		printf("iterations %i S_c %.10f h %.10f H %.5f C: %.5f sum: %.10f, xid %i yid %i tid %i\n", iter, S_c_new, midpoint, H, C, sum, xid, yid, thread_id);
+	}
+	*/
+    global_index(spc_ctx.h.ptr, spc_ctx.h.pitch, xid, yid, noborder)[0] = midpoint;
+}
+
+
+
+
+void callSolveForhProblemCellsBisection(dim3 grid, dim3 block, SolveForhProblemCellsKernelArgs* args){
+	cudaMemcpyToSymbolAsync(spc_ctx, args, sizeof(SolveForhProblemCellsKernelArgs), 0, cudaMemcpyHostToDevice);
+	solveForhProblemCellsBisectionNew<<<grid, block>>>();
+}
+
+void callSolveForhProblemCells(dim3 grid, dim3 block, SolveForhProblemCellsKernelArgs* args){
+	cudaMemcpyToSymbolAsync(spc_ctx, args, sizeof(SolveForhProblemCellsKernelArgs), 0, cudaMemcpyHostToDevice);
+	solveForhProblemCellsBruteForce<<<grid, block>>>();
 }
 
 void callTimeIntegration(dim3 grid, dim3 block, int gridDimX, TimeIntegrationKernelArgs* args){
@@ -804,5 +1134,83 @@ void callTimestepReductionKernel(int nThreads, TimestepReductionKernelArgs* args
 }
 
 
+__global__ void solveForhProblemCellsBisection(){
+	size_t thread_id = blockIdx.x*blockDim.x + threadIdx.x;
+	size_t cell_id = thread_id/32;
+	if (cell_id > spc_ctx.d_numValid[0])
+		return;
+	int cell_block_id = cell_id % N_CELLS_PER_BLOCK;
+	int local_tid = thread_id % 32;
+	int xid = spc_ctx.d_out[cell_id] % common_ctx.nx;
+	int yid = spc_ctx.d_out[cell_id] / (int) common_ctx.nx;
+	int noborder = 0;
+
+    float S_c_new = global_index(spc_ctx.S_c.ptr, spc_ctx.S_c.pitch, xid, yid, noborder)[0];
+	float C = global_index(spc_ctx.scaling_parameter_C.ptr, spc_ctx.scaling_parameter_C.pitch,
+						   xid, yid, 0)[0];
+    float H = global_index(common_ctx.H.ptr, common_ctx.H.pitch, xid, yid, noborder)[0];
+
+	if (S_c_new == 0){
+		global_index(spc_ctx.h.ptr, spc_ctx.h.pitch, xid, yid, noborder)[0] = 0;
+		return;
+	}
+
+    __shared__ float shared_mem[N_CELLS_PER_BLOCK][32];
+
+    // BISECTION METHOD
+	float TOL = 0.000005;
+	float l_cap = -((C/sqrt(common_ctx.s_b_res))-C)/(common_ctx.delta_rho*common_ctx.g);
+	float dz = spc_ctx.dz;
+	float a = 0;
+	float b = H + l_cap;
+	float F_a = S_c_new;
+	float F_b;
+	float prev_satu_c, curr_satu_c;
+	int iter = 0;
+	int max_iter = 50;
+	float interval_end;
+	int pre_compute_n = 0;
+	float pre_compute_sum = 0;
+	float F_mid =100;
+	float midpoint;
+	float z0;
+	int print;
+	F_parallel(S_c_new, H, b, spc_ctx.dz, C, pre_compute_n,
+			   pre_compute_sum, shared_mem, local_tid, cell_block_id, z0);
+	pre_compute_sum = shared_mem[cell_block_id][0];
+	float height = fminf(H,b);
+	pre_compute_n = ceil(height/dz)-1;
+	prev_satu_c = computeSatu(z0+(pre_compute_n)*dz, C);
+	curr_satu_c = computeSatu(z0+height, C);
+	interval_end = 0.5*(prev_satu_c+curr_satu_c)*(height-dz*(pre_compute_n));
+	F_b = S_c_new - (pre_compute_sum + interval_end);
+	pre_compute_sum = 0;
+	pre_compute_n = 0;
+	while ( ((b-a)*0.5) > TOL && iter < max_iter){
+		midpoint = (a+b)*0.5;
+		F_parallel(S_c_new, H, midpoint, dz, C, pre_compute_n,
+				   pre_compute_sum, shared_mem, local_tid, cell_block_id, z0);
+		pre_compute_sum = shared_mem[cell_block_id][0];
+		height = fminf(H,midpoint);
+		pre_compute_n = ceil(height/dz)-1;
+		prev_satu_c = computeSatu(z0 + (pre_compute_n)*dz, C);
+		curr_satu_c = computeSatu(z0 + height, C);
+		interval_end = 0.5*(prev_satu_c+curr_satu_c)*(height-dz*(pre_compute_n));
+		F_mid = S_c_new - (pre_compute_sum + interval_end);
+		if (sign(F_mid) == sign(F_a)){
+			a = midpoint;
+			F_a = F_mid;
+		}  else {
+			b = midpoint;
+			F_b = F_mid;
+		}
+		iter++;
+	}
+	if (local_tid == 1 && isnan(S_c_new)){
+		printf("iterations %i S_c %.20f h %.5f H %.5f C: %.5f xid %i yid %i\n", iter, S_c_new, midpoint, H, C, xid, yid);
+	}
+
+    global_index(spc_ctx.h.ptr, spc_ctx.h.pitch, xid, yid, noborder)[0] = midpoint;
+}
 
 

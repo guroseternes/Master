@@ -40,6 +40,8 @@ void InitialConditions::computeAllGridBlocks(){
 	computeGridBlock(grid, block, nx, ny, BLOCKDIM_X_FLUX, BLOCKDIM_Y_FLUX);
 	computeGridBlock(grid_flux, block_flux, nx + 2*border, ny + 2*border, BLOCKDIM_X_FLUX,
 			BLOCKDIM_Y_FLUX, TILEDIM_X, TILEDIM_Y);
+	computeGridBlock(grid_pc, block_pc, nx*ny, PROBLEM_CELL_THREADS);
+	computeGridBlockBisection(grid_pc_bisection, block_pc_bisection, nx*ny, N_CELLS_PER_BLOCK);
 	nElements = grid_flux.x*grid_flux.y;
 }
 
@@ -63,7 +65,7 @@ void InitialConditions::createScalingParameterTable(CpuPtr_2D H){
 	scaling_parameter = CpuPtr_2D(nx,ny,0,true);
 	for (int j = 0; j < ny; j++){
 		for (int i = 0; i < nx; i++){
-			scaling_parameter(i,j) = 0.4*(-g)*delta_rho*H(i,j);
+			scaling_parameter(i,j) = 0.1*(-g)*delta_rho*H(i,j);
 		}
 	}
 }

@@ -68,6 +68,10 @@ struct TimeIntegrationKernelArgs {
 	GpuRawPtr vol_old;
 	GpuRawPtr vol_new;
 	GpuRawPtr scaling_parameter_C;
+
+	unsigned int* d_isValid;
+	int* d_in;
+
 	float dz;
 	float* global_dt;
 };
@@ -78,6 +82,18 @@ struct TimestepReductionKernelArgs {
 	float cfl_scale;
 	float* global_dt;
 	float* dt_vec;
+};
+
+struct SolveForhProblemCellsKernelArgs {
+
+	GpuRawPtr h;
+	GpuRawPtr S_c;
+	GpuRawPtr scaling_parameter_C;
+
+	size_t* d_numValid;
+
+	int* d_out;
+	float dz;
 };
 
 #endif /* KARGS_H_ */
