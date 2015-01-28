@@ -37,9 +37,7 @@ void setCoarseMobIntegrationKernelArgs(CoarseMobIntegrationKernelArgs* args,
 								  GpuRawPtr h, cudaPitchedPtr k,
 								  GpuRawPtr K, GpuRawPtr nI, GpuRawPtr scaling_para_C,
 								  GpuRawPtrInt a_b_i,
-								  float p_ci,
-								  float dz);
-
+								  float p_ci,float dz, Perm perm_type);
 
 void setFluxKernelArgs(FluxKernelArgs* args,
 					   GpuRawPtr Lambda_c, GpuRawPtr Lambda_b,

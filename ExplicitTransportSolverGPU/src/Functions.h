@@ -10,10 +10,17 @@
 #include "matio.h"
 #include "GpuPtr.h"
 #include "engine.h"
+#include "cudpp.h"
+#include "cudpp_manager.h"
+#include "cudpp_plan.h"
+#include "cudpp_scan.h"
 using namespace std;
 
+void createOutputFiles(FILE* &matlab_file_h, FILE* &matlab_file_coarse_satu,
+		               FILE* &matlab_file_volume, char* filename_output);
 void print_properties();
 void startMatlabEngine(Engine* ep, char* formation);
+void setUpCUDPP(CUDPPHandle &theCudpp, CUDPPHandle &plan, int nx, int ny, unsigned int* d_isValid, int* d_in, int* d_out, unsigned int& num_elements);
 float maximum(int n, float* array);
 float computeTotalVolume(CpuPtr_2D vol, int nx, int ny);
 void readSourceFromMATLABFile(const char* filename, float* source);

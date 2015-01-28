@@ -2,6 +2,7 @@
 #define KARGS_H_
 
 #include "GpuPtr.h"
+#include "Config.h"
 
 struct CommonArgs {
 	GpuRawPtr H;
@@ -36,6 +37,7 @@ struct CoarseMobIntegrationKernelArgs {
 	GpuRawPtrInt active_block_indexes;
 	float dz;
 	float p_ci;
+	Perm perm_type;
 };
 
 struct FluxKernelArgs  {

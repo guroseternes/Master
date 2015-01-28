@@ -5,6 +5,69 @@
 #include <sys/time.h>
 #include "CpuPtr.h"
 
+void setUpCUDPP(CUDPPHandle &theCudpp, CUDPPHandle &plan, int nx, int ny, unsigned int* d_isValid, int* d_in, int* d_out, unsigned int& num_elements){
+
+		CUDPPResult res;
+		num_elements=nx*ny;
+
+		CUDPPConfiguration config;
+		config.datatype = CUDPP_INT;
+		config.algorithm = CUDPP_COMPACT;
+		config.options = CUDPP_OPTION_FORWARD;
+
+		res = cudppPlan(theCudpp, &plan, config, num_elements,1,0);
+
+
+		size_t d_numValidElements;
+		unsigned int* h_isValid;
+		int* h_in;
+		size_t* d_numValid = NULL;
+		h_isValid = new unsigned int[num_elements];
+		h_in = new int[num_elements];
+		for (int i = 0; i < nx; i++){
+			for (int j = 0; j < ny; j++){
+				h_isValid[nx*j + i] = 0;
+				h_in[nx*j + i] = nx*j + i;
+			}
+		}
+
+/*		cudaMalloc((void**) &d_isValid, sizeof(unsigned int)*num_elements);
+		cudaMalloc((void**) &d_in, sizeof(int)*num_elements);
+		cudaMalloc((void**) &d_out, sizeof(int)*num_elements);
+		cudaMalloc((void**) &d_numValid, sizeof(size_t));*/
+		cudaMemcpy(d_isValid, h_isValid, sizeof(unsigned int)*num_elements, cudaMemcpyHostToDevice);
+		cudaMemcpy(d_in, h_in, sizeof(int)*num_elements, cudaMemcpyHostToDevice);
+		printf("\nCudaMemcpy error: %s", cudaGetErrorString(cudaGetLastError()));
+
+}
+
+void createOutputFiles(FILE* &matlab_file_h, FILE* &matlab_file_coarse_satu, FILE* &matlab_file_volume, char* dir_output){
+
+	char filename_output[300];
+	strcpy(filename_output, dir_output);
+	strcat(filename_output, "h.txt");
+	matlab_file_h = fopen(filename_output, "w");
+	if (!matlab_file_h){
+		printf("ERROR: Can not open file %s", filename_output);
+	}
+
+	strcpy(filename_output, dir_output);
+	strcat(filename_output, "coarse_satu.txt");
+	matlab_file_coarse_satu = fopen(filename_output, "w");
+	if (!matlab_file_coarse_satu){
+		printf("ERROR: Can not open file %s", filename_output);
+	}
+
+	strcpy(filename_output, dir_output);
+	strcat(filename_output, "volume.txt");
+	matlab_file_volume = fopen(filename_output, "w");
+	if (!matlab_file_volume){
+		printf("ERROR: Can not open file %s", filename_output);
+	}
+
+}
+
+
 // Print GPU properties
 void print_properties(){
         int deviceCount = 0;
@@ -28,7 +91,7 @@ void startMatlabEngine(Engine* ep, char* formation){
 	engEvalString(ep, "cd ~/mrst-bitbucket/mrst-other/co2lab;");
 	engEvalString(ep, "startuplocal");
 	char str[100];
-	strcpy(str, "cd ~/mrst-bitbucket/mrst-other/co2lab/guro_code/");
+	strcpy(str, "cd ~/mrst-bitbucket/mrst-other/co2lab/FullyIntegratedVESimulator/SimulationData/FormationData/");
 	strcat(str,formation);
 	engEvalString(ep, str);
 	engEvalString(ep, "variables = loadDataForCpp;");
@@ -334,7 +397,7 @@ mat_t *matfp;
 matvar_t *matvar;
 matfp = Mat_Open(filename, MAT_ACC_RDONLY);
 if ( NULL == matfp ) {
-	fprintf(stderr,"Error opening MAT file 1");
+	fprintf(stderr ,"Error opening MAT file 1");
 }
 
 matvar = Mat_VarReadNextInfo(matfp);

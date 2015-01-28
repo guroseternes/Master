@@ -136,7 +136,7 @@ CpuPtr_2D &CpuPtr_2D::operator = (const CpuPtr_2D &rhs){
 		}
 		for (int i = 0; i < NX*NY; i++){
 			data[i]=rhs.data[i];
-		}	
+		}
 	}
 }
 
@@ -164,33 +164,5 @@ void CpuPtr_2D::convertToDoublePointer(double* ptr){
 	}
 }
 
-/*
-void CpuPtr_2D::printToFile(FILE* filePtr, bool withHeader, bool withBorder){
-
-	float dx = (xmax - xmin)/(float)nx;
-	float dy = (ymax -ymin)/(float)ny;
-	if (not withBorder){	
-		if (withHeader){
-			fprintf(filePtr, "nx: %i ny: %i\nborder: %i\t time: %f\n", nx, ny, border,time);
-			fprintf(filePtr, "xmin: %.1f xmax: %.1f\nymin: %.1f ymax: %.1f\n", xmin, xmax, ymin, ymax);
-		}
-		for (int j=0; j<nx; j++){
-			for (int i=0; i<nx; i++){
-				fprintf(filePtr, "%.3f\t%.3f\t%.3f\t%.3f\n", time, xmin + dx*i, ymin + dy*j, this->operator()(i,j));
-			}
-		}
-	}else{
-		if (withHeader){
-			fprintf(filePtr, "nx: %i ny: %i\nborder: %i\t time: %f\n", NX, NY, border,time);
-			fprintf(filePtr, "xmin: %.1f xmax: %.1f\nymin: %.1f ymax: %.1f\n", xmin, xmax, ymin, ymax);
-		}
-		for (int j=0; j<NY; j++){
-			for (int i=0; i<NX; i++){
-				fprintf(filePtr, "%.3f\t%.3f\t%.3f\t%.3f\n", time, xmin + dx*i-dx*border, ymin + dy*j-dy*border, this->operator()(i-border,j-border));
-			}
-		}
-
-	}
-*/
 
 

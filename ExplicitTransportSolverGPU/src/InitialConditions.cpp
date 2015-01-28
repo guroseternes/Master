@@ -61,16 +61,16 @@ void InitialConditions::createnIntervalsTable(CpuPtr_2D H){
 	}
 }
 
-void InitialConditions::createScalingParameterTable(CpuPtr_2D H){
+void InitialConditions::createScalingParameterTable(CpuPtr_2D H, float beta){
 	scaling_parameter = CpuPtr_2D(nx,ny,0,true);
 	for (int j = 0; j < ny; j++){
 		for (int i = 0; i < nx; i++){
-			scaling_parameter(i,j) = 0.1*(-g)*delta_rho*H(i,j);
+			scaling_parameter(i,j) = beta*(-g)*delta_rho*H(i,j);
 		}
 	}
 }
 
-void InitialConditions::createScalingParameterTable(CpuPtr_3D perm, CpuPtr_3D poro, float surface_tension_theta){
+void InitialConditions::createScalingParameterTableLeverettJ(CpuPtr_3D perm, CpuPtr_3D poro, float surface_tension_theta){
 	scaling_parameter = CpuPtr_2D(nx,ny,0,true);
 	for (int j = 0; j < ny; j++){
 		for (int i = 0; i < nx; i++){
@@ -79,26 +79,14 @@ void InitialConditions::createScalingParameterTable(CpuPtr_3D perm, CpuPtr_3D po
 	}
 }
 
+// If we start with a sharp-interface saturation distribution imported form MATLAB
 void InitialConditions::createInitialCoarseSatu(CpuPtr_2D H, CpuPtr_2D h){
 	initial_coarse_satu_c = CpuPtr_2D(nx, ny, 0, true);
 	float res = integral_res/100;
 	for (int j = 0; j < ny; j++){
 			for (int i = 0; i < nx; i++){
-				//initial_coarse_satu_c(i,j) = computeCoarseSaturation(p_ci, g, delta_rho, s_b_res, h(i,j), res, ceil(h(i,j)/res),
-																	// scaling_parameter(i,j), H(i,j));
 				initial_coarse_satu_c(i,j) = h(i,j)*(1-s_b_res);
 			}
 		}
 }
 
-// Reference table for conversion between saturation and capillary pressure
-void InitialConditions::createReferenceTable(){
-	int n = 1/resolution;
-	p_cap_ref_table = new float[n];
-	s_c_ref_table = new float[n];
-	for (int i = 0; i < n; i++){
-		// Insert equation for analytic capillary pressure curve
-		p_cap_ref_table[n-i-1] = delta_rho*g*max_height*c_cap*pow(1-resolution*i,-0.5f);
-		s_c_ref_table[n-i-1] = 1;//resolution*i;
-	}
-}

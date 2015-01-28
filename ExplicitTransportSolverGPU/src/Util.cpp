@@ -1,10 +1,12 @@
 #include "Util.h"
 #include "Kernels.h"
+#include "Config.h"
 
 
 void computeGridBlockBisection(dim3& grid, dim3& block, int NX, int n_cells_per_block){
-        int num_threads = NX*32;
-        block.x = n_cells_per_block*32;
+        int threads_per_cell = 64;
+		int num_threads = NX*threads_per_cell;
+        block.x = n_cells_per_block*threads_per_cell;
         grid.x = (NX + block.x - 1)/block.x;
 }
 
@@ -140,7 +142,7 @@ void setCoarseMobIntegrationKernelArgs(CoarseMobIntegrationKernelArgs* args,
 								  GpuRawPtr h, cudaPitchedPtr k,
 								  GpuRawPtr K, GpuRawPtr nI, GpuRawPtr scaling_para_C,
 								  GpuRawPtrInt a_b_i,
-								  float p_ci,float dz){
+								  float p_ci,float dz, Perm perm_type){
 	args->Lambda_c = Lambda_c;
 	args->Lambda_b = Lambda_b;
 	args->dLambda_c = dLambda_c;
@@ -155,6 +157,8 @@ void setCoarseMobIntegrationKernelArgs(CoarseMobIntegrationKernelArgs* args,
 
 	args->p_ci = p_ci;
 	args->dz = dz;
+
+	args->perm_type = perm_type;
 }
 
 void setFluxKernelArgs(FluxKernelArgs* args,

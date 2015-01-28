@@ -13,8 +13,8 @@
 class InitialConditions{
 public:
 	InitialConditions(int nx, int ny, float max_height);
-	void createScalingParameterTable(CpuPtr_2D H);
-	void createScalingParameterTable(CpuPtr_3D perm, CpuPtr_3D poro, float surface_tension_theta);
+	void createScalingParameterTable(CpuPtr_2D H, float beta);
+	void createScalingParameterTableLeverettJ(CpuPtr_3D perm, CpuPtr_3D poro, float surface_tension_theta);
 	void createInitialCoarseSatu(CpuPtr_2D H, CpuPtr_2D h);
 	void createReferenceTable();
 	void createnIntervalsTable(CpuPtr_2D H);
@@ -51,8 +51,6 @@ public:
 
 	// Saturation - Permeability tables
 	float resolution;
-	float* p_cap_ref_table;
-	float* s_c_ref_table;
 	float size_tables;
 
 	CpuPtr_2D nIntervals;
