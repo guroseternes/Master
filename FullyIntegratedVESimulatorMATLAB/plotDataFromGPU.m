@@ -71,5 +71,5 @@ currentValuesMatrix3 = (reshape(currentValues3,nx,ny));
     view(2)
     colorbar
     set(gca,'FontSize',16)
-    
+    max(max(currentValues3))
 end

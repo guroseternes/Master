@@ -22,13 +22,21 @@
 #include "Config.h"
 #include "unistd.h"
 
+#define cudaCheckError() { \
+cudaError_t e=cudaGetLastError(); \
+if(e!=cudaSuccess) { \
+printf("Cuda failure %s:%d: '%s'\n",__FILE__,__LINE__,cudaGetErrorString(e)); \
+exit(0); \
+} \
+}
+
 int main() {
 
 	//SPECIFY PARMETERS, SEE CONFIG.H FILE FOR ENUM OPTIONS
 	Configurations config;
 
 	//Algorithm for solving for h
-	config.algorithm_solve_h = BRUTE_FORCE;
+	config.algorithm_solve_h = NEWTON_BRUTE_FORCE;
 	//Total time in years
 	config.total_time = 20;
 	// Initial time step in seconds
@@ -39,9 +47,9 @@ int main() {
 	config.pressure_update_injection = 2;
 	config.pressure_update_migration = 5;
 	// Permeability type
-	config.perm_type = PERM_VARIATIONAL;
+	config.perm_type = PERM_CONSTANT;
 	// Name of formation
-	config.formation_name = JOHANSEN;
+	config.formation_name = UTSIRA;
 	// Parameter beta for the Corey permeability function
 	config.beta = 0.4;
 
@@ -255,6 +263,7 @@ int main() {
 	GpuPtrInt_1D active_block_indexes_flux_device(n_active_blocks_flux,
 			&active_block_indexes_flux[0]);
 
+	cudaCheckError();
 	setCommonArgs(&common_args, IC.p_ci, IC.delta_rho, IC.g, IC.mu_c, IC.mu_b,
 			IC.s_c_res, IC.s_b_res, IC.lambda_end_point_c, IC.lambda_end_point_b,
 			active_east_device.getRawPtr(), active_north_device.getRawPtr(),
@@ -297,16 +306,19 @@ int main() {
 	size_t* d_numValid = NULL;
 	size_t numValidElements;
 	unsigned int numElements=nx*ny;
+	cudaCheckError();
 	cudaMalloc((void**) &d_isValid, sizeof(unsigned int)*numElements);
 	cudaMalloc((void**) &d_in, sizeof(int)*numElements);
 	cudaMalloc((void**) &d_out, sizeof(int)*numElements);
 	cudaMalloc((void**) &d_numValid, sizeof(size_t));
+	cudaCheckError();
 
 	CUDPPHandle theCudpp;
 	cudppCreate(&theCudpp);
 
 	setUpCUDPP(theCudpp, plan, nx, ny, d_isValid, d_in, d_out, numElements);
 	printf("\nCudaMemcpy error: %s", cudaGetErrorString(cudaGetLastError()));
+	cudaCheckError();
 
 	setTimeIntegrationKernelArgs(&time_int_kernel_args, global_dt_device.getRawPtr(),
 			IC.integral_res,pv_device.getRawPtr(), h_device.getRawPtr(),
@@ -315,16 +327,19 @@ int main() {
 			vol_old_device.getRawPtr(), vol_new_device.getRawPtr(),
 			d_isValid, d_in);
 
+	cudaCheckError();
 
 	setSolveForhProblemCellsKernelArgs(&solve_problem_cells_args, h_device.getRawPtr(),
 									   coarse_satu_device.getRawPtr(), scaling_parameter_C_device.getRawPtr(),
 									   d_out, IC.integral_res, d_numValid);
+	cudaCheckError();
 
 	//Compute start volume
 	callCoarseMobIntegrationKernel(new_sparse_grid, IC.block, IC.grid.x, &coarse_mob_int_args);
 	callFluxKernel(new_sparse_grid_flux, IC.block_flux, IC.grid_flux.x, &flux_kernel_args);
 	callTimeIntegration(new_sparse_grid, IC.block, IC.grid.x, &time_int_kernel_args);
 
+	cudaCheckError();
 	vol_old_device.download(volume.getPtr(), 0, 0, nx, ny);
 	float total_volume_old = computeTotalVolume(volume, nx, ny);
 
@@ -375,11 +390,15 @@ int main() {
 		U_y_device.upload(flux_north.getPtr(), 0, 0,nx+2*IC.border, ny+2*IC.border);
 		time_start_iter = getWallTime();
 		while (t < tf && iter_total < iter_total_lim){
+			cudaCheckError();
 			callCoarseMobIntegrationKernel(new_sparse_grid, IC.block, IC.grid.x, &coarse_mob_int_args);
+			cudaCheckError();
 
 			callFluxKernel(new_sparse_grid_flux, IC.block_flux, IC.grid_flux.x, &flux_kernel_args);
 
+			cudaCheckError();
 			callTimestepReductionKernel(TIME_THREADS, &time_red_kernel_args);
+			cudaCheckError();
 
 			// Set the initial time step
 			if (iter_total < 1 && iter_inner_loop == 0){
@@ -394,6 +413,7 @@ int main() {
 			IC.global_time_data[1] += (float)dt_table[table_index];
 			cudaMemcpy(global_dt_device.getRawPtr(), IC.global_time_data, sizeof(float)*3, cudaMemcpyHostToDevice);
 			*/
+			cudaCheckError();
 
 			if (config.algorithm_solve_h == BRUTE_FORCE)
 				callTimeIntegration(new_sparse_grid, IC.block, IC.grid.x, &time_int_kernel_args);
@@ -406,8 +426,10 @@ int main() {
 				cudppCompact(plan, d_out, d_numValid, d_in, d_isValid, numElements);
 				callSolveForhProblemCellsBisection(IC.grid_pc, IC.block_pc, &solve_problem_cells_args);
 			}
+			cudaCheckError();
 
 			cudaMemcpy(IC.global_time_data, global_dt_device.getRawPtr(), sizeof(float)*3, cudaMemcpyDeviceToHost);
+			cudaCheckError();
 
 			// Keep track of injected volume, insert injection coordinate and rate
 			injected += IC.global_time_data[0]*source(50,50);
