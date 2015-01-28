@@ -1,5 +1,6 @@
 % Startup of mrst-bitbucket for FullyIntegratedVESimulator in MATLAB
 
+cd ../../
 cd mrst-core
 ls
 startup
@@ -12,4 +13,6 @@ ls
 cd co2lab/
 ls
 startuplocal
+cd ../../
+cd Master
 cd FullyIntegratedVESimulator/
