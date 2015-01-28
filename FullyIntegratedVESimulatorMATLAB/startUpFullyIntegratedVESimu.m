@@ -4,9 +4,10 @@ cd ../../
 cd mrst-core
 ls
 startup
+cd ../Master/FullyIntegratedVESimulatorMATLAB
 startup_user
 ls
-cd ..
+cd ../../
 ls
 cd mrst-other/
 ls
@@ -15,4 +16,16 @@ ls
 startuplocal
 cd ../../
 cd Master
-cd FullyIntegratedVESimulator/
+cd FullyIntegratedVESimulatorMATLAB/
+mkdir SimulationData
+cd SimulationData
+mkdir FormationData
+mkdir ResultData
+cd FormationData
+mkdir Johansen
+mkdir Utsira
+cd ..
+cd ResultData
+mkdir Johansen
+mkdir Utsira
+cd ../../

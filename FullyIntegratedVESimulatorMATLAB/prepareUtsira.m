@@ -207,13 +207,9 @@ sol.s = height2Sat(sol, Gt, fluidVE);
 
 
 grav = [0, 0, 9.806649999999999];
-
-clf;
-plotCellData(Gt, sol.pressure);
-view(v); axis tight off; colorbar
-
  
 %% Convert MATLAB data to a suitable format for the GPU solver after injection phase
+
 [east_face_index, north_face_index] = prepareDataForGPU(sol, Gt, rock, rock2D, fluidVE, bcVE, WVE, preComp, ...
     './SimulationData/FormationData/Utsira/data', './SimulationData/FormationData/Utsira/dimensions',...
     './SimulationData/FormationData/Utsira/active_cells');
