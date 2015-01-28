@@ -85,14 +85,20 @@ void print_properties(){
 }
 
 void startMatlabEngine(Engine* ep, char* formation){
-	engEvalString(ep, "cd ~/mrst-bitbucket/mrst-core;");
-	engEvalString(ep, "startup;");
-	engEvalString(ep, "startup_user;");
-	engEvalString(ep, "cd ~/mrst-bitbucket/mrst-other/co2lab;");
-	engEvalString(ep, "startuplocal");
-	char str[100];
-	strcpy(str, "cd ~/mrst-bitbucket/mrst-other/co2lab/FullyIntegratedVESimulator/SimulationData/FormationData/");
+	engEvalString(ep, "current_dir=pwd;");
+	mxArray* s = engGetVariable(ep, "current_dir");
+	size_t len_s = mxGetN(s);
+	char cwd_str[256];
+	mxGetString(s, cwd_str, len_s+1);
+	std::cout << std::endl << "Current directory of MATLAB: " << cwd_str << std::endl;
+
+	engEvalString(ep, "cd FullyIntegratedVESimulatorMATLAB;");
+	engEvalString(ep, "startUpFullyIntegratedVESimu;");
+
+	char str[1024];
+	strcpy(str, "cd SimulationData/FormationData/");
 	strcat(str,formation);
+
 	engEvalString(ep, str);
 	engEvalString(ep, "variables = loadDataForCpp;");
 }

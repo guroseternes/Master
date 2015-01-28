@@ -28,11 +28,11 @@ int main() {
 	Configurations config;
 
 	//Algorithm for solving for h
-	config.algorithm_solve_h = NEWTON_BRUTE_FORCE;
+	config.algorithm_solve_h = BRUTE_FORCE;
 	//Total time in years
 	config.total_time = 20;
 	// Initial time step in seconds
-	config.initial_time_step = 12592000;
+	config.initial_time_step = 30000;//12592000;
 	// Injection stop
 	config.injection_time = 100;
 	// Pressure update interval in years
@@ -41,13 +41,11 @@ int main() {
 	// Permeability type
 	config.perm_type = PERM_VARIATIONAL;
 	// Name of formation
-	config.formation_name = UTSIRA;
+	config.formation_name = JOHANSEN;
 	// Parameter beta for the Corey permeability function
 	config.beta = 0.4;
 
 	//////////////////////////////////////////////////////////////////////////
-
-
 
 	if (config.formation_name == UTSIRA){
 		config.formation = "utsira";
@@ -80,8 +78,11 @@ int main() {
 	const char* path;
 	readlink("/proc/self/exe", buffer, buff_size);
 	printf("PATH %s", buffer);
-	char* output_dir_path = "/home/guro/mrst-bitbucket/mrst-other/co2lab/FullyIntegratedVESimulator/SimulationData/ResultData/";
-	char* input_dir_path = "/home/guro/mrst-bitbucket/mrst-other/co2lab/FullyIntegratedVESimulator/SimulationData/FormationData/";
+	char* output_dir_path = "FullyIntegratedVESimulatorMATLAB/SimulationData/ResultData/";
+	char* input_dir_path = "FullyIntegratedVESimulatorMATLAB/SimulationData/FormationData/";
+
+	std::cout << "Trying to open " << input_dir_path << std::endl;
+	std::cout << "Output will end up in " << output_dir_path << std::endl;
 
 	// Filename strings
 	char dir_input[300];

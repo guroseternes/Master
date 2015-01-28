@@ -17,6 +17,7 @@ startuplocal
 cd ../../
 cd Master
 cd FullyIntegratedVESimulatorMATLAB/
+addpath(pwd)
 mkdir SimulationData
 cd SimulationData
 mkdir FormationData
