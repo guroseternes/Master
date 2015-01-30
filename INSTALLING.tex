@@ -1,0 +1,79 @@
+\documentclass[a4paper, 11pt,utf8]{report}
+
+%\input{math-commands}
+%\input{packages}
+\newlength\figureheight
+\newlength\figurewidth
+
+\begin{document}
+\chapter*{Recipe for using the fully-integrated VE simulator}
+These are the instructions to get started with the fully integrated simulator, which is a combined MATLAB and GPU program. \section*{Installations}
+\begin{enumerate}
+\item{Download MATLAB version 2014}
+\item{Download and install CUDA Driver}
+\item{Download MRST from bitbucket}
+\item{Clone the repository from sammaster/fully\_integrated\_ve\_co2 github:}
+\end{enumerate}
+
+\subsection{Matlab}
+\begin{itemize}
+\item Mount the iso using ``mkdir matlab\_iso'' followed by ``mount -o loop <iso-file> matlab\_iso''
+\item install using ``cd matlab\_iso \&\& sudo sh install''
+\end{itemize}
+
+\subsection{MRST bitbucket}
+\begin{itemize}
+\item clone bitbucket repositories (date: 2015-01-28)\\
+``mkdir co2''\\
+``git clone https://<user>\@bitbucket.org/mrst/mrst-core.git''\\
+``git clone https://<user>\@bitbucket.org/mrst/mrst-autodiff.git''\\
+``git clone https://<user>\@bitbucket.org/mrst/mrst-visualization.git''\\
+``git clone https://<user>\@bitbucket.org/mrst/mrst-multiscale.git''\\
+``git clone https://<user>\@bitbucket.org/mrst/mrst-model-IO.git''\\
+``git clone https://<user>\@bitbucket.org/mrst/mrst-solvers.git''
+\item make directory ``mkdir mrst-other/co2lab''\\
+``git clone https://<user>\@github.com/sintefmath/DEPRECATED-co2lab.git mrst-other/co2lab''\\
+This directory holds the mrst reference used in the master thesis. Disable hysteresis and set parameters as described in thesis to reproduce plots.
+\end{itemize}
+
+
+\subsection{Cudpp}
+\begin{itemize}
+\item Download from Github (tested with revision e98e46cf17). 
+\item Unzip using ``tar zxvf cudpp-2.1.tar.gz''. 
+\item Build using cmake. ``mkdir build \&\& cmake .. \&\& make -j8''
+\item If building on Ubuntu 14.04 with GCC 4.9, it won't work. Try using ``CC=/usr/bin/gcc-4.8 CXX=/usr/bin/g++-4.8 cmake \&\& make -j8''
+\item Make sure that you install also (preferably to a local directory)
+\item Note that when you install, several files will be missing. Copy these from the build directory into the include directory where it is installed. (manager, plan, scan).
+\end{itemize}
+
+\subsection{GPU Code}
+\begin{itemize}
+\item Clone into the directory ``co2''\\
+``git clone https://github.com/guroseternes/Master.git''
+\item download and install ``matio'', ``http://sourceforge.net/projects/matio''. Version 1.5.2\\
+run ``./configure \&\& make''
+\item ``cd ExplicitTransportSolverGPU'' 
+\item Make using cmake
+\item Matlab may require csh to be installed, run ``apt-get install csh''
+\end{itemize}
+
+\section*{Running the program}
+First MATLAB is used to create/prepare the formation data sets such as Utsira and Johansen, which are included in the folder. MATLAB creates the initial data and also transforms the data into a cartesian, single-point GPU suitable format. This GPU data is then stored in a folder in the .mat format. The next step is to start the GPU simulator. When the simulation is completed the GPU saves the results in three txt files, one for the height, one for the volume and one for the coarse saturation. In the fully integrated simulator MATLAB folder, there is a function to plot the results in the txt-files.
+\begin{enumerate}
+\item Open the ``Master/FullyIntegratedVESimulatorMATLAB'' folder and run the script "startUpFullyIntegratedVESimu"
+\item Open ``mrst-other/co2lab/co2lab/data'' and run downloadDataSets
+\item Open ``Master/FullyIntegratedVESimulatorMATLAB'' and run ``prepareUtsira'' and ``prepareJohansen''. This creates initial conditions suitable for the GPU simulator.
+Inside these files you can specify different formation resolutions as well as the well position. When running these files, the data required for the GPU simulator is automatically created and stored in the "SimulationData" directory.
+\item In the CPP project directory, open the cpp file "CoarsePermIntegrationSimuCuda".
+At the top of the file you can specify different parameters such as injection time, total time, and formation name in the config class. The name must correspond to the name of the folder where you have stored the formation data created in MATLAB. You must also specify the correct pathname for these in the char variable "output dir path". Now you are ready to run the simulation! 
+\item Build the CUDA/CPP program and run.
+\item The results from the simulation are stored as txt files in the directory 
+"FullyIntegratedVESimulator/SimulationData/ResultData".. . These files can be plotted by the function "plotDataFromGPU" in FullyIntegratedVESimulator in MATLAB. 
+Set Gt=3
+\texttt{plotDataFromGPU(Gt, 'Utsira','h.txt', 'volume.txt', 'coarse\_satu.txt'}
+\end{enumerate}
+
+
+
+\end{document}
